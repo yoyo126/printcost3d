@@ -1,0 +1,25 @@
+<!doctype html><html lang='fr'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>PrintCost 3D</title><link rel='stylesheet' href='style.css'></head><body>
+<div class='app'><header><div><h1>PrintCost <span>3D</span></h1><p>Calcule ton coût réel et ton prix de vente.</p></div><button id='settingsBtn' class='ghost'>⚙️ Réglages</button></header>
+<nav><button class='tab active' data-tab='calc'>Calcul</button><button class='tab' data-tab='history'>Historique</button></nav>
+<main>
+<section id='calc' class='panel active'>
+<div class='card drop' id='drop'><input id='file' type='file' accept='.stl,.gcode,.3mf'><div class='dropIcon'>＋</div><strong>Importer STL / 3MF / G-code</strong><small>Dépose le fichier ici ou touche pour choisir</small><div id='fileInfo' class='fileInfo'></div></div>
+<div class='grid2'>
+<label>Imprimante<select id='printer'><option value='p2s'>Bambu Lab P2S + 2 AMS</option><option value='h2d'>Bambu Lab H2D + 2 AMS</option></select></label>
+<label>Filament<select id='material'><option value='pla'>PLA</option><option value='petg'>PETG</option><option value='asa'>ASA</option><option value='tpu'>TPU</option></select></label>
+<label>Prix bobine (€)<input id='spoolPrice' type='number' step='.01' value='20'></label><label>Poids bobine (g)<input id='spoolWeight' type='number' value='1000'></label>
+<label>Quantité<input id='qty' type='number' min='1' value='1'></label><label>Remplissage (%)<input id='infill' type='number' min='0' max='100' value='15'></label>
+<label>Temps impression (h)<input id='hours' type='number' min='0' step='.01' placeholder='Auto si G-code'></label><label>Filament utilisé (g)<input id='grams' type='number' min='0' step='.1' placeholder='Auto si détecté'></label>
+</div>
+<div class='notice' id='estimateNote'>Pour un STL, l'app estime la matière à partir du volume du modèle. Le temps reste à renseigner tant qu'un moteur de slicing n'est pas connecté.</div>
+<button id='calcBtn' class='primary'>Calculer mon prix</button>
+<div id='result' class='result hidden'>
+<div class='heroResult'><small>Prix de vente conseillé</small><div id='salePrice'>—</div><span>hors expédition</span></div>
+<div class='costGrid'><div><span>Matière</span><b id='cMaterial'>—</b></div><div><span>Électricité</span><b id='cPower'>—</b></div><div><span>Machine</span><b id='cMachine'>—</b></div><div><span>Maintenance</span><b id='cMaint'>—</b></div><div><span>Risque échec</span><b id='cRisk'>—</b></div><div class='total'><span>Coût réel</span><b id='cTotal'>—</b></div></div>
+<div class='profit'><span>Bénéfice estimé</span><b id='profit'>—</b></div><button id='saveBtn' class='secondary'>Enregistrer dans l'historique</button>
+</div>
+</section>
+<section id='history' class='panel'><div id='historyList' class='historyList'></div><button id='clearHistory' class='danger'>Effacer l'historique</button></section>
+</main></div>
+<dialog id='settings'><form method='dialog'><div class='dialogHead'><h2>Réglages</h2><button value='cancel' class='x'>✕</button></div><h3>Tarifs généraux</h3><div class='grid2'><label>Électricité €/kWh<input id='electricity' type='number' step='.001' value='.25'></label><label>Marge cible (%)<input id='margin' type='number' value='100'></label><label>Risque d'échec (%)<input id='risk' type='number' value='7'></label><label>Maintenance €/h<input id='maintenance' type='number' step='.01' value='.10'></label><label>Durée amortissement (h)<input id='lifeHours' type='number' value='5000'></label></div><h3>Machines</h3><div class='grid2'><label>P2S coût complet (€)<input id='p2sPrice' type='number' value='1000'></label><label>P2S puissance moyenne (W)<input id='p2sPower' type='number' value='120'></label><label>H2D coût complet (€)<input id='h2dPrice' type='number' value='2200'></label><label>H2D puissance moyenne (W)<input id='h2dPower' type='number' value='160'></label></div><button id='saveSettings' value='default' class='primary'>Enregistrer</button></form></dialog>
+<script src='app.js'></script></body></html>
