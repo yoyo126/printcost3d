@@ -1,18 +1,22 @@
-<!doctype html><html lang='fr'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>PrintCost 3D</title><link rel='stylesheet' href='style.css?v=2'></head><body>
+<!doctype html><html lang='fr'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><title>PrintCost 3D</title><link rel='stylesheet' href='style.css?v=3'></head><body>
 <div class='app'><header><div><h1>PrintCost <span>3D</span></h1><p>Calcule ton coût réel et ton prix de vente.</p></div><button id='settingsBtn' class='ghost'>⚙️ Réglages</button></header>
 <nav><button class='tab active' data-tab='calc'>Calcul</button><button class='tab' data-tab='history'>Historique</button></nav>
 <main>
 <section id='calc' class='panel active'>
-<div class='card drop' id='drop'><input id='file' type='file' accept='.stl,.gcode,.3mf'><div class='dropIcon'>＋</div><strong>Importer STL / 3MF / G-code</strong><small>Dépose le fichier ici ou touche pour choisir</small><div id='fileInfo' class='fileInfo'></div></div>
+<div class='slicerBar'><span id='slicerState' class='slicerState'>● Vérification du moteur…</span><button id='retrySlice' class='ghost'>Réessayer</button></div>
+<div class='card drop' id='drop'><input id='file' type='file' accept='.stl,.3mf'><div class='dropIcon'>＋</div><strong>Importer STL / 3MF</strong><small>Le fichier sera automatiquement tranché avec Bambu Studio</small><div id='fileInfo' class='fileInfo'></div></div>
 <div class='grid2'>
 <label>Imprimante<select id='printer'><option value='p2s'>Bambu Lab P2S + 2 AMS</option><option value='h2d'>Bambu Lab H2D + 2 AMS</option></select></label>
 <label>Filament<select id='material'><option value='pla'>PLA</option><option value='petg'>PETG</option><option value='asa'>ASA</option><option value='tpu'>TPU</option></select></label>
 <label>Prix bobine (€)<input id='spoolPrice' type='number' step='.01' value='20'></label><label>Poids bobine (g)<input id='spoolWeight' type='number' value='1000'></label>
 <label>Quantité<input id='qty' type='number' min='1' value='1'></label><label>Remplissage (%)<input id='infill' type='number' min='0' max='100' value='15'></label>
-<label>Temps impression (h)<input id='hours' type='number' min='0' step='.01' placeholder='Auto si G-code'></label><label>Filament utilisé (g)<input id='grams' type='number' min='0' step='.1' placeholder='Auto si détecté'></label>
+<label class='checkLabel'><input id='supports' type='checkbox'> Activer les supports</label><span></span>
+<label>Temps impression (h)<input id='hours' type='number' readonly placeholder='Calcul automatique'></label><label>Filament utilisé (g)<input id='grams' type='number' readonly placeholder='Calcul automatique'></label>
 </div>
-<div class='notice' id='estimateNote'>Pour un STL, l'app estime la matière à partir du volume du modèle. Le temps reste à renseigner tant qu'un moteur de slicing n'est pas connecté.</div>
-<button id='calcBtn' class='primary'>Calculer mon prix</button>
+<div class='sliceDetails'><span>Longueur : <b id='filamentLength'>—</b></span><span>Supports : <b id='supportDetected'>—</b></span><span>Source : <b id='sliceSource'>—</b></span></div>
+<div id='sliceProgress' class='notice hidden'>Calcul du modèle en cours… Cela peut prendre quelques instants.</div>
+<div class='notice' id='estimateNote'>Importe un STL ou un 3MF pour obtenir automatiquement le temps, le filament et le prix.</div>
+<button id='calcBtn' class='primary' disabled>Calculer mon prix</button>
 <div id='result' class='result hidden'>
 <div class='heroResult'><small>Prix de vente conseillé</small><div id='salePrice'>—</div><span>hors expédition</span></div>
 <p class='resultHelp'>Le coût réel couvre l'impression. Le prix conseillé ajoute ta marge et le temps de prise en charge du client.</p>
@@ -23,4 +27,4 @@
 <section id='history' class='panel'><div id='historyList' class='historyList'></div><button id='clearHistory' class='danger'>Effacer l'historique</button></section>
 </main></div>
 <dialog id='settings'><form method='dialog'><div class='dialogHead'><h2>Réglages</h2><button value='cancel' class='x'>✕</button></div><h3>Tarifs généraux</h3><div class='grid2'><label>Électricité €/kWh<input id='electricity' type='number' min='0' step='.001' value='.25'></label><label>Marge cible (%)<input id='margin' type='number' min='0' value='100'></label><label>Risque d'échec (%)<input id='risk' type='number' min='0' value='7'></label><label>Maintenance €/h<input id='maintenance' type='number' min='0' step='.01' value='.10'></label><label>Prise en charge (€)<input id='handlingFee' type='number' min='0' step='.50' value='5'><small>Forfait fixe pour les échanges, la préparation et la finition.</small></label><label>Minimum facturé (€)<input id='minimumPrice' type='number' min='0' step='.50' value='10'><small>Plancher du prix conseillé, hors expédition.</small></label><label>Durée amortissement (h)<input id='lifeHours' type='number' min='1' value='5000'></label></div><h3>Machines</h3><div class='grid2'><label>P2S coût complet (€)<input id='p2sPrice' type='number' value='1000'></label><label>P2S puissance moyenne (W)<input id='p2sPower' type='number' value='120'></label><label>H2D coût complet (€)<input id='h2dPrice' type='number' value='2200'></label><label>H2D puissance moyenne (W)<input id='h2dPower' type='number' value='160'></label></div><button id='saveSettings' value='default' class='primary'>Enregistrer</button></form></dialog>
-<script src='app.js?v=2'></script></body></html>
+<script src='slicing-app.js?v=3'></script></body></html>

@@ -59,3 +59,7 @@ header .ghost{font-size:0}
 .costGrid{grid-template-columns:1fr}
  .costGrid .total{grid-column:auto}
 }
+.slicerBar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff)}
+.slicerState{font-size:.86rem;font-weight:700}.slicerState.ready{color:#17834b}.slicerState.offline{color:#b94738}
+.sliceDetails{display:grid;gap:6px;margin:12px 0;padding:12px;border-radius:12px;background:rgba(127,127,127,.08);font-size:.84rem}.sliceDetails span{display:flex;justify-content:space-between;gap:12px}.sliceDetails b{text-align:right}
+.checkLabel{display:flex!important;align-items:center;gap:9px}.checkLabel input{width:auto!important}.primary:disabled{opacity:.45;cursor:not-allowed}
