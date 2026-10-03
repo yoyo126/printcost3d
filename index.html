@@ -566,6 +566,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <div class="card" id="prodCard" hidden>
       <div class="cardHead"><span class="badgeIcon">🏭</span><h2>Production des imprimantes</h2></div>
       <div class="seg" id="prodSeg"><button data-p="m" class="on">Mois</button><button data-p="t">Trimestre</button><button data-p="s">Semestre</button><button data-p="y">Année</button></div>
+      <div class="seg" id="prodDev" hidden></div>
       <div id="prodBody"></div>
       <div class="toolbar" style="margin:12px 0 0"><span class="hint" id="prodInfo" style="margin:0"></span><button class="btn small" id="prodFull">↻ Récupérer tout l’historique</button></div>
     </div>
@@ -2028,7 +2029,7 @@ $('fSpool').ref.addEventListener('input', async e => {
 
 /* ---------- Bilan ---------- */
 /* ---------- Production : tout ce que les imprimantes ont imprimé (historique Bambu) ---------- */
-let hist = null, histAt = 0, prodPer = 'm';
+let hist = null, histAt = 0, prodPer = 'm', prodDev = 'all';
 async function loadHistory(full = false) {
   if (!cloud.logged) { $('prodCard').hidden = true; return; }
   if (!full && hist && Date.now() - histAt < 300000) { renderProd(); if (!$('secHist').hidden) renderHist(); return; }
@@ -2054,7 +2055,14 @@ function renderProd() {
   const box = $('prodBody'); if (!hist) return;
   $('prodCard').hidden = false;
   $('prodSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.p === prodPer));
-  const done = hist.tasks.filter(t => (t.end || t.start) && t.status !== 1);
+  const all = hist.tasks.filter(t => (t.end || t.start) && t.status !== 1);
+  // Imprimantes connues (compte Bambu + celles vues dans l'historique)
+  const devs = [...(hist.devices || [])];
+  for (const t of all) if (t.device && !devs.some(d => d.id === t.device)) devs.push({id: t.device, name: t.deviceName || 'Imprimante', model: ''});
+  if (prodDev !== 'all' && !devs.some(d => d.id === prodDev)) prodDev = 'all';
+  $('prodDev').hidden = devs.length < 2;
+  $('prodDev').innerHTML = `<button data-d="all"${prodDev === 'all' ? ' class="on"' : ''}>Toutes</button>` + devs.map(d => `<button data-d="${esc(d.id)}"${prodDev === d.id ? ' class="on"' : ''}>${esc(d.name)}</button>`).join('');
+  const done = prodDev === 'all' ? all : all.filter(t => t.device === prodDev);
   const groups = new Map();
   for (const t of done) {
     const k = periodKey(String(t.end || t.start).slice(0, 10), prodPer), c = taskCost(t), ok = t.status === 2;
@@ -2071,10 +2079,26 @@ function renderProd() {
       <td>${periodLabel(k, prodPer)}<div class="hint showSm" style="margin:2px 0 0">${dur(g.h)} · fil. ${eur(g.material)} · élec. ${eur(g.power)} · mach. ${eur(g.machine)}${g.failN ? ` · ${g.failN} ratée${g.failN > 1 ? 's' : ''}` : ''}</div></td><td class="n">${g.n}</td><td class="n hideSm">${dur(g.h)}</td><td class="n">${g.grams >= 1000 ? fr(g.grams / 1000) + ' kg' : gr(g.grams)}</td>
       <td class="n hideSm">${eur(g.material)}</td><td class="n hideSm">${eur(g.power)}</td><td class="n hideSm">${eur(g.machine)}</td><td class="n"><b>${eur(g.total)}</b></td>
       <td class="n hideSm">${g.failN ? `${g.failN} · ${eur(g.failCost)}` : '—'}</td></tr>`; }).join('')}</tbody></table></div>
-    <p class="hint">En moyenne <b>${eur(tot.n ? tot.total / tot.n : 0)}</b> par impression réussie et <b>${eur(tot.h ? tot.total / tot.h : 0)}</b> par heure d’impression. Coût de production seulement (filament au prix de tes bobines actuelles, électricité, amortissement et maintenance de la vraie imprimante) ; sans ton temps ni l’emballage. Les impressions ratées sont comptées à part, sur leur poids prévu.</p>`
+    ${prodDev === 'all' && devs.length > 1 ? prodCompare(all, devs) : ''}
+    <p class="hint">${prodDev !== 'all' ? `<b>${esc(devs.find(d => d.id === prodDev)?.name || '')}</b> : e` : 'E'}n moyenne <b>${eur(tot.n ? tot.total / tot.n : 0)}</b> par impression réussie et <b>${eur(tot.h ? tot.total / tot.h : 0)}</b> par heure d’impression. Coût de production seulement (filament au prix de tes bobines actuelles, électricité, amortissement et maintenance de la vraie imprimante) ; sans ton temps ni l’emballage. Les impressions ratées sont comptées à part, sur leur poids prévu.</p>`
     : '<div class="empty"><span class="big">🏭</span>L’historique se remplit à chaque lecture de tes imprimantes. Touche « Récupérer tout l’historique » pour remonter plus loin.</div>';
 }
 $('prodSeg').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (!b) return; prodPer = b.dataset.p; renderProd(); });
+$('prodDev').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (!b) return; prodDev = b.dataset.d; renderProd(); });
+// Comparatif des imprimantes sur tout l'historique connu
+function prodCompare(all, devs) {
+  const rows = devs.map(d => {
+    const r = {name: d.name, n: 0, h: 0, grams: 0, total: 0, failN: 0};
+    for (const t of all.filter(x => x.device === d.id)) { const c = taskCost(t); if (t.status === 2) { r.n++; r.h += c.h; r.grams += c.grams; r.total += c.total; } else r.failN++; }
+    return r;
+  }).filter(r => r.n || r.failN);
+  if (rows.length < 2) return '';
+  return `<h3 style="margin:16px 0 8px">Par imprimante <span class="hint" style="display:inline;margin:0;font-weight:500">· tout l’historique connu</span></h3>
+    <div class="tableWrap"><table><thead><tr><th>Imprimante</th><th class="n">Impr.</th><th class="n hideSm">Heures</th><th class="n hideSm">Filament</th><th class="n">Coût total</th><th class="n">€ / heure</th><th class="n hideSm">€ / impr.</th><th class="n hideSm">Ratées</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td><b>${esc(r.name)}</b><div class="hint showSm" style="margin:2px 0 0">${dur(r.h)} · ${r.grams >= 1000 ? fr(r.grams / 1000) + ' kg' : gr(r.grams)} · ${eur(r.n ? r.total / r.n : 0)} / impr.</div></td><td class="n">${r.n}</td>
+      <td class="n hideSm">${dur(r.h)}</td><td class="n hideSm">${r.grams >= 1000 ? fr(r.grams / 1000) + ' kg' : gr(r.grams)}</td><td class="n"><b>${eur(r.total)}</b></td>
+      <td class="n">${eur(r.h ? r.total / r.h : 0)}</td><td class="n hideSm">${eur(r.n ? r.total / r.n : 0)}</td><td class="n hideSm">${r.failN || '—'}</td></tr>`).join('')}</tbody></table></div>`;
+}
 $('prodFull').onclick = async () => { $('prodFull').disabled = true; await loadHistory(true); $('prodFull').disabled = false; };
 
 function renderReport() {
