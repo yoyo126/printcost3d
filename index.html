@@ -512,6 +512,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
         <div class="card priceIn">
           <label>Ton prix de vente (€)<input id="jPrice" type="number" min="0" step="any" inputmode="decimal" placeholder="Vide = prix conseillé"></label>
         </div>
+        <label class="check" id="keepFileRow" hidden style="margin:0 0 10px;font-weight:600"><input type="checkbox" id="keepFile" checked> <span id="keepFileTxt"></span></label>
         <div class="actionsBar">
           <button class="btn primary" id="saveModel">Ajouter au catalogue</button>
           <button class="btn sell" id="sellJob">💸 Vendu</button>
@@ -722,6 +723,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   <div class="dFoot"><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Continuer</button></div>
 </form></dialog>
 
+<input type="file" id="attachFile" hidden>
 <div class="toast" id="toast" role="status"></div>
 <canvas id="confetti" aria-hidden="true"></canvas>
 
@@ -1288,7 +1290,7 @@ let job, loadedPlates = [], est = null, autoName = '', resultOk = false, lastObj
 function newJob() {
   const s = state.settings;
   return {id:null, name:'', printerId: defaultPrinterId(), hours:'', minutes:'', pieces:1,
-    filaments:[blankFil()], prepMin:s.prepMin, finishMin:s.finishMin, packaging:s.packaging, price:'', thumb:null, estimated:false, asm: defaultAsm()};
+    filaments:[blankFil()], prepMin:s.prepMin, finishMin:s.finishMin, packaging:s.packaging, price:'', thumb:null, estimated:false, asm: defaultAsm(), file: null, link: ''};
 }
 function blankFil() {
   const sp = state.spools.find(s => s.remaining > 0);
@@ -1312,7 +1314,7 @@ function renderCalc() {
   $('saveModel').textContent = label; $('sumSave').textContent = job.id ? 'Mettre à jour' : 'Ajouter';
   $('editBanner').hidden = !job.id;
   if (job.id) $('editBanner').innerHTML = `✏️ Modification de <b>${esc(job.name)}</b> du catalogue. <button class="link" id="cancelEdit">Annuler</button>`;
-  fillAsmInputs(); renderFils(); updateResult();
+  fillAsmInputs(); renderFils(); updateResult(); renderKeepFile();
 }
 // Matières proposées quand la ligne n'est pas reliée à une bobine du stock
 const MAT_GROUPS = {
@@ -1459,6 +1461,7 @@ async function handleFile(file) {
   if (/\.(pdf|txt|md|png|jpe?g|webp|heic)$/.test(lower)) { importNotice([file]); $('asmCard').scrollIntoView({behavior: 'smooth', block: 'start'}); return; }
   $('plateBox').hidden = true; $('estBox').hidden = true; loadedPlates = []; est = null; lastObjs = 0; fileCfg = null;
   mw = null; $('mwBox').hidden = true;
+  if (/\.(3mf|stl)$/.test(lower)) { calcFile = file; $('keepFile').checked = true; }
   if (!/\.(3mf|stl)$/.test(lower)) { setInfo(`${esc(file.name)} : format non reconnu. Choisis un fichier .3mf ou .stl (ou une notice PDF pour le montage).`, 'err'); return; }
   setInfo('⏳ Lecture du fichier…');
   const base = file.name.replace(/\.gcode\.3mf$/i, '').replace(/\.(3mf|stl)$/i, '');
@@ -1506,6 +1509,7 @@ $('mwForm').onsubmit = async e => {
     $('mwMeta').innerHTML = `${mw.creator ? 'par ' + esc(mw.creator) + ' · ' : ''}${mwCommercial(mw.license) ? `licence ${esc(mw.license)}` : `<span class="neg">⚠️ ${esc(mw.license || 'licence inconnue')} : vente en principe interdite</span>`}`;
     const pick = mw.instances.find(i => String(i.id) === profile) || mw.instances.find(i => i.id === mw.defaultInstanceId) || mw.instances.find(i => i.isDefault) || mw.instances[0];
     mwSel = {inst: pick.id, plate: 'all'};
+    job.link = `https://makerworld.com/fr/models/${mw.id}`; calcFile = null;
     $('mwBox').hidden = false; $('plateBox').hidden = true; $('estBox').hidden = true;
     renderMwPicks(); applyMw(true);
     $('mwInsts').querySelector('.on')?.scrollIntoView({block: 'nearest', inline: 'nearest'});
@@ -1640,21 +1644,57 @@ addEventListener('drop', e => {
   const f = e.dataTransfer.files[0]; if (f) { showTab('calc'); handleFile(f); }
 });
 
-$('resetJob').onclick = () => { job = newJob(); loadedPlates = []; est = null; autoName = ''; lastObjs = 0; fileCfg = null; mw = null; $('mwBox').hidden = true; $('mwUrl').value = ''; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); window.scrollTo({top: 0}); };
+$('resetJob').onclick = () => { calcFile = null; job = newJob(); loadedPlates = []; est = null; autoName = ''; lastObjs = 0; fileCfg = null; mw = null; $('mwBox').hidden = true; $('mwUrl').value = ''; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); window.scrollTo({top: 0}); };
 document.addEventListener('click', e => { if (e.target.id === 'cancelEdit') $('resetJob').click(); });
+/* ---------- Fichiers du catalogue (espace privé Vercel Blob) ---------- */
+let calcFile = null;
+const BLOB_CLIENT = 'https://cdn.jsdelivr.net/npm/@vercel/blob@2.8.0/client/+esm';
+const sizeTxt = n => n > 1048576 ? `${fr(n / 1048576)} Mo` : `${Math.max(1, Math.round(n / 1024))} Ko`;
+const fileHref = f => `/api/files?url=${encodeURIComponent(f.url)}&name=${encodeURIComponent(f.name)}`;
+function renderKeepFile() {
+  const row = $('keepFileRow'), f = calcFile || job.file;
+  row.hidden = !cloud.logged || !f;
+  if (row.hidden) return;
+  $('keepFile').closest('label').querySelector('input').hidden = !calcFile;
+  $('keepFileTxt').innerHTML = calcFile
+    ? `📎 Garder le fichier dans le catalogue <span class="muted">(${esc(calcFile.name)}, ${sizeTxt(calcFile.size)})</span>`
+    : `📎 Fichier gardé : <a href="${fileHref(job.file)}">${esc(job.file.name)}</a> <span class="muted">(dépose un autre fichier pour le remplacer)</span>`;
+}
+async function uploadModelFile(m, file) {
+  toast(`📎 Envoi de ${file.name}…`);
+  try {
+    const B = await import(BLOB_CLIENT);
+    const safe = file.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.\-]+/g, '_');
+    const r = await B.upload(`modeles/${m.id}/${safe}`, file, {access: 'private', handleUploadUrl: '/api/files',
+      contentType: file.type || 'application/octet-stream',
+      onUploadProgress: p => { if (file.size > 3e6) toast(`📎 Envoi… ${Math.round(p.percentage)} %`); }});
+    const old = m.file?.url;
+    m.file = {url: r.url, name: file.name, size: file.size};
+    save(); renderAll(); toast('📎 Fichier gardé dans le catalogue');
+    if (old && old !== r.url) api('/api/files?url=' + encodeURIComponent(old), {method: 'DELETE'}).catch(() => {});
+  } catch (e) { console.error(e); toast('⚠️ Envoi du fichier impossible' + (e?.message ? ' : ' + e.message : '')); }
+}
+$('attachFile').onchange = e => {
+  const f = e.target.files[0], m = state.models.find(x => x.id === $('attachFile').dataset.model); e.target.value = '';
+  if (f && m) uploadModelFile(m, f);
+};
+
 $('saveModel').onclick = () => {
   job.name = job.name.trim() || 'Modèle sans nom';
   const data = JSON.parse(JSON.stringify(job)), isNew = !job.id;
   data.filaments = data.filaments.filter(l => num(l.grams) > 0).map(l => ({...l, pricePerKg: linePerKg(l)}));
+  let saved = data;
   if (!isNew) {
     const m = state.models.find(x => x.id === job.id);
-    if (m) Object.assign(m, data, {stock: m.stock, created: m.created});
+    if (m) { Object.assign(m, data, {stock: m.stock, created: m.created}); saved = m; }
   } else {
     data.id = uid(); data.stock = 0; data.created = today(); state.models.unshift(data);
   }
   if (!save()) return;
   toast(isNew ? '✨ Ajouté au catalogue' : 'Modèle mis à jour');
   if (isNew) confetti();
+  if (calcFile && cloud.logged && $('keepFile').checked) uploadModelFile(saved, calcFile);
+  calcFile = null;
   job = newJob(); est = null; autoName = ''; lastObjs = 0; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc();
   showTab('catalog'); window.scrollTo({top: 0});
 };
@@ -1684,6 +1724,8 @@ function renderCatalog() {
           <button class="btn small" data-act="sell" data-id="${m.id}">💸 Vendre</button>
           <button class="btn small" data-act="edit" data-id="${m.id}">Modifier</button>
           <button class="btn small" data-act="stock" data-id="${m.id}">Stock…</button>
+          ${m.file ? `<a class="btn small" href="${fileHref(m.file)}" title="${esc(m.file.name)}">📄 Fichier</a>` : cloud.logged ? `<button class="btn small" data-act="attach" data-id="${m.id}">📎 Joindre le fichier</button>` : ''}
+          ${m.link ? `<a class="btn small" href="${esc(m.link)}" target="_blank" rel="noopener">🔗 MakerWorld</a>` : ''}
           <button class="btn small danger" data-act="del" data-id="${m.id}" aria-label="Supprimer">🗑</button>
         </div>
       </div></div>`;
@@ -1698,8 +1740,12 @@ $('catSearch').oninput = renderCatalog;
 $('catList').addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const m = state.models.find(x => x.id === b.dataset.id); if (!m) return;
-  if (b.dataset.act === 'edit') { job = JSON.parse(JSON.stringify(m)); loadedPlates = []; est = null; lastObjs = 0; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); showTab('calc'); window.scrollTo(0, 0); }
-  if (b.dataset.act === 'del' && confirm(`Supprimer « ${m.name} » du catalogue ? Les ventes déjà enregistrées sont conservées.`)) { trash(m.id); state.models = state.models.filter(x => x !== m); save(); renderAll(); }
+  if (b.dataset.act === 'edit') { calcFile = null; job = JSON.parse(JSON.stringify(m)); loadedPlates = []; est = null; lastObjs = 0; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); showTab('calc'); window.scrollTo(0, 0); }
+  if (b.dataset.act === 'del' && confirm(`Supprimer « ${m.name} » du catalogue ?${m.file ? ' Son fichier sera aussi supprimé.' : ''} Les ventes déjà enregistrées sont conservées.`)) {
+    if (m.file) api('/api/files?url=' + encodeURIComponent(m.file.url), {method: 'DELETE'}).catch(() => {});
+    trash(m.id); state.models = state.models.filter(x => x !== m); save(); renderAll();
+  }
+  if (b.dataset.act === 'attach') { $('attachFile').dataset.model = m.id; $('attachFile').click(); }
   if (b.dataset.act === 'stock') {
     const v = prompt(`Stock de « ${m.name} » (nombre de pièces prêtes à vendre) :`, m.stock || 0);
     if (v !== null && Number.isFinite(parseInt(v))) { m.stock = parseInt(v); save(); renderAll(); }
