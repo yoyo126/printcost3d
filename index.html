@@ -1248,6 +1248,13 @@ function renderCalc() {
   if (job.id) $('editBanner').innerHTML = `✏️ Modification de <b>${esc(job.name)}</b> du catalogue. <button class="link" id="cancelEdit">Annuler</button>`;
   fillAsmInputs(); renderFils(); updateResult();
 }
+// Matières proposées quand la ligne n'est pas reliée à une bobine du stock
+const MATERIALS = ['PLA', 'PLA Basic', 'PLA Matte', 'PLA Silk', 'PLA Translucent', 'PLA Galaxy', 'PLA Marble', 'PLA Metal', 'PLA-CF', 'PLA Tough',
+  'PETG', 'PETG HF', 'PETG Translucent', 'PETG-CF', 'ABS', 'ASA', 'TPU', 'PA', 'PA-CF', 'PAHT-CF', 'PC', 'PET-CF', 'PVA', 'Support'];
+function matOptions(cur) {
+  const list = cur && !MATERIALS.some(m => baseMat(m) === baseMat(cur)) ? [cur, ...MATERIALS] : MATERIALS;
+  return list.map(m => `<option${baseMat(m) === baseMat(cur) ? ' selected' : ''}>${esc(m)}</option>`).join('');
+}
 function renderFils() {
   const opts = sel => `<option value="">— Sans bobine du stock</option>` + state.spools.filter(s => s.remaining > 0 || s.id === sel)
     .map(s => `<option value="${esc(s.id)}"${s.id === sel ? ' selected' : ''}>${esc(spoolLabel(s))}</option>`).join('');
@@ -1259,7 +1266,7 @@ function renderFils() {
       <label class="fgr">Grammes<input data-k="grams" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.grams)}" placeholder="0"></label>
       <button class="iconBtn fdel" data-del="${i}" title="Retirer" aria-label="Retirer ce filament">✕</button>
       <div class="filStat" data-stat="${i}"></div>
-      ${sp ? '' : `<div class="manual"><label>Matière<input data-k="material" value="${esc(l.material)}"></label><label>Prix (€/kg)<input data-k="pricePerKg" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.pricePerKg)}"></label></div>`}
+      ${sp ? '' : `<div class="manual"><label>Matière<select data-k="material">${matOptions(l.material)}</select></label><label>Prix (€/kg)<input data-k="pricePerKg" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.pricePerKg)}"></label></div>`}
     </div>`;
   }).join('') || '<p class="hint">Aucun filament.</p>';
 }
