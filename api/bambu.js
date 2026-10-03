@@ -102,8 +102,16 @@ export function normPrinter(p = {}) {
   });
   const ext = [p.vt_tray, ...(Array.isArray(p.vir_slot) ? p.vir_slot : [])].filter(t => t && t.tray_type).map(t => ({...tray(t, null, null), ext: true}));
   const now = Number(p.ams?.tray_now);
-  return {units, ext, active: Number.isFinite(now) && now < 254 ? now : null, nozzles: (p.device?.extruder?.info || []).length || 1,
-    state: p.gcode_state || '', progress: p.mc_percent ?? null, job: p.subtask_name || ''};
+  const ext2 = p.device?.extruder?.info || [];
+  // températures : imprimantes à une buse (nozzle_temper) ou H2D à deux buses (device.extruder.info[].temp, codé ×65536 + consigne sur certains firmwares)
+  const nozzles = ext2.length ? ext2.map(x => ({id: x.id, temp: Number(x.temp) > 1000 ? Number(x.temp) & 0xFFFF : Number(x.temp), target: Number(x.temp) > 1000 ? Number(x.temp) >> 16 : null}))
+    : (p.nozzle_temper != null ? [{id: 0, temp: Number(p.nozzle_temper), target: Number(p.nozzle_target_temper) || null}] : []);
+  return {units, ext, active: Number.isFinite(now) && now < 254 ? now : null, nozzles: ext2.length || 1,
+    state: p.gcode_state || '', progress: p.mc_percent ?? null, job: p.subtask_name || '',
+    remaining: p.mc_remaining_time ?? null, layer: p.layer_num ?? null, layers: p.total_layer_num ?? null,
+    bed: p.bed_temper != null ? {temp: Number(p.bed_temper), target: Number(p.bed_target_temper) || null} : (p.device?.bed?.info?.temp != null ? {temp: Number(p.device.bed.info.temp), target: null} : null),
+    nozzleTemps: nozzles, hms: (p.hms || []).map(h => ({attr: h.attr, code: h.code})).slice(0, 5),
+    error: Number(p.print_error) || 0, speed: p.spd_lvl ?? null, plate: p.plate_idx ?? null, taskId: p.task_id || ''};
 }
 
 // Impression de l'historique Bambu, en version courte

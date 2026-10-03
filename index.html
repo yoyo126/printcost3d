@@ -258,6 +258,20 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .pill.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 .pill.brand{background:var(--brand-soft);color:var(--brand-ink);border-color:transparent}
 .spool{width:76px;height:76px}
+.gal{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;margin:-4px -4px 12px;padding:4px}
+.gal img{height:220px;max-width:85%;object-fit:cover;border-radius:14px;scroll-snap-align:start;background:var(--card2);flex:none}
+.tagRow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.licBox{margin-top:10px;padding:10px 12px;border-radius:12px;font-size:13.5px}
+.licBox.ok{background:var(--ok-soft);color:var(--ok)}.licBox.no{background:var(--warn-soft);color:var(--warn)}
+.filLine{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.filLine:last-child{border-bottom:0}
+.filLine .st{font-size:12.5px;font-weight:650}
+.shopActs{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin:4px 0 14px}
+.shopActs .btn{text-align:center;text-decoration:none}
+.live{margin-top:10px;padding:10px 12px;border-radius:14px;background:var(--brand-soft);font-size:13.5px}
+.live.fail{background:var(--bad-soft)}
+.live .bar{height:8px;margin:6px 0}
+.live b{font-family:var(--display)}
 .catGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
 .mCard{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:visible;display:flex;flex-direction:column;min-width:0;transition:transform .15s,box-shadow .15s;position:relative}
 .mCard:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
@@ -402,7 +416,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 @media (max-width:680px){
   .app{padding:14px 14px calc(96px + env(safe-area-inset-bottom))}
   header{padding-top:2px}
-  nav{position:fixed;top:auto;left:0;right:0;bottom:0;margin:0;border-radius:22px 22px 0 0;padding:8px 6px calc(8px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(5,1fr);gap:2px;border-bottom:0}
+  nav{position:fixed;top:auto;left:0;right:0;bottom:0;margin:0;border-radius:22px 22px 0 0;padding:8px 6px calc(8px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(6,1fr);gap:1px;border-bottom:0}
   .tab{flex-direction:column;gap:3px;font-size:11px;padding:6px 2px;border-radius:14px}
   .tab svg{width:22px;height:22px}
   .tab.active{background:none;color:var(--brand-ink);box-shadow:none}
@@ -444,6 +458,12 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   .items{grid-template-columns:1fr}
   .spoolGrid{grid-template-columns:1fr;gap:6px}
   .catGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .gal img{height:170px}
+  .shopActs{grid-template-columns:1fr 1fr}
+  .shopActs .btn:first-child{grid-column:1/-1}
+  .filLine{grid-template-columns:22px 1fr;row-gap:2px}
+  .filLine .st{grid-column:2}
+  .tab{font-size:10.5px}
   .mPrice{font-size:14px}
   .grp{grid-template-columns:92px 1fr}
   .estGrid{grid-template-columns:110px 1fr}
@@ -482,6 +502,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <button class="tab" data-tab="catalog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg>Catalogue</button>
     <button class="tab" data-tab="sales"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4.5A1.5 1.5 0 014.5 3H12l9 9-9 9z"/><circle cx="8" cy="8" r="1.6"/></svg>Ventes</button>
     <button class="tab" data-tab="spools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg>Filaments</button>
+    <button class="tab" data-tab="shop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16l-1.5 12.5a1 1 0 01-1 .9h-11a1 1 0 01-1-.9z"/><path d="M8.5 7a3.5 3.5 0 017 0"/></svg>Boutique</button>
     <button class="tab" data-tab="report"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-7M11 20V5M17 20v-10M3 20h18"/></svg>Bilan</button>
   </nav>
 
@@ -617,6 +638,17 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
       <div id="spoolList" class="spoolGrid"></div>
       <label class="check" style="margin-top:14px"><input type="checkbox" id="showEmpty"> Afficher les bobines vides</label>
     </div>
+  </section>
+
+  <!-- BOUTIQUE MAKERWORLD -->
+  <section id="shop" class="panel">
+    <div id="shopList">
+      <form class="linkRow" id="shopForm" style="margin:0 0 10px"><input id="shopQ" type="search" placeholder="Rechercher sur MakerWorld : porte-clés, vase, support casque…" enterkeyhint="search"><button class="btn primary">Rechercher</button></form>
+      <div class="toolbar" style="margin-bottom:10px"><label class="check"><input type="checkbox" id="shopSell" checked> Revendables seulement</label><span class="hint" id="shopInfo" style="margin:0"></span></div>
+      <div id="shopResults" class="catGrid"></div>
+      <button class="btn" id="shopMore" style="width:100%;margin-top:12px" hidden>Voir plus</button>
+    </div>
+    <div id="shopDetail" hidden></div>
   </section>
 
   <!-- BILAN -->
@@ -2592,6 +2624,7 @@ async function cloudInit() {
   cloud.logged = true; $('accountBox').hidden = false;
   await cloudPull();
   checkBambuExpiry();
+  if ($('shop').classList.contains('active')) openShop();
   addEventListener('focus', () => { if (!isDirty()) cloudPull(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !isDirty()) cloudPull(); });
   setInterval(() => { if (!document.hidden && !isDirty()) cloudPull(); }, 60000);
@@ -2645,8 +2678,8 @@ function renderBambu() {
     const units = a ? a.units.map(u => `<div class="amsBox"><div class="amsHead"><b>AMS ${u.letter}</b>${dual && u.nozzle != null ? ` · buse ${u.nozzle === 1 ? 'gauche' : 'droite'}` : ''}${u.humidity != null ? ` · 💧 ${u.humidity} %` : ''}${u.temp != null ? ` · ${fr(u.temp)} °C` : ''}</div>
         <div class="slots">${u.trays.map(t => slot(t, u.letter + t.slot)).join('')}</div></div>`).join('')
       + (a.ext.length ? `<div class="amsBox"><div class="amsHead"><b>Bobine externe</b></div><div class="slots">${a.ext.map(t => slot(t, 'Ext')).join('')}</div></div>` : '') : '';
-    const running = a?.state === 'RUNNING' ? ` · impression ${a.progress ?? ''} %${a.job ? ' : ' + esc(a.job) : ''}` : '';
-    return `<div class="bDev"><b>${esc(d.name)}</b> <span class="muted">${esc(d.model)}</span> <span class="pill ${d.online ? 'ok' : ''}">${d.online ? 'en ligne' : 'hors ligne'}</span><span class="muted">${running}</span>
+    return `<div class="bDev"><b>${esc(d.name)}</b> <span class="muted">${esc(d.model)}</span> <span class="pill ${d.online ? 'ok' : ''}">${d.online ? 'en ligne' : 'hors ligne'}</span>
+      ${a ? liveBox(d, a) : ''}
       ${units || `<p class="hint" style="margin:6px 0 0">${d.online ? 'AMS non lu.' : 'Imprimante hors ligne : AMS non lu.'}</p>`}</div>`;
   }).join('') || '<p class="hint">Aucune imprimante trouvée sur ce compte.</p>';
   const unlinked = allTrays().filter(({t, dev}) => !t.empty && !spoolForTray(t, dev)).length;
@@ -3099,6 +3132,170 @@ $('fBambu').addEventListener('submit', async e => {
   finally { btn.disabled = false; }
 });
 
+/* ---------- En direct : ce que fait chaque imprimante ---------- */
+const STATE_FR = {RUNNING: 'en cours', PAUSE: 'en pause', PREPARE: 'préparation', SLICING: 'préparation', FINISH: 'terminée', FAILED: 'échouée', IDLE: 'en veille'};
+function liveBox(d, a) {
+  const st = a.state || 'IDLE', busy = ['RUNNING', 'PAUSE', 'PREPARE', 'SLICING'].includes(st);
+  if (!busy && st !== 'FAILED') return `<div class="hint" style="margin:4px 0 0">${st === 'FINISH' && a.job ? `✓ Dernière impression terminée : ${esc(a.job)}` : '💤 En veille'}</div>`;
+  const endD = new Date(Date.now() + (a.remaining || 0) * 60000), end = a.remaining ? (endD.toDateString() === new Date().toDateString() ? '' : endD.getDate() === new Date(Date.now() + 864e5).getDate() ? 'demain ' : endD.toLocaleDateString('fr-FR', {weekday: 'long'}) + ' ') + endD.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}) : '';
+  const errCode = a.error ? a.error.toString(16).toUpperCase().padStart(8, '0').replace(/^(.{4})/, '$1_') : '';
+  const temps = [...(a.nozzleTemps || []).map((n, i) => `buse${(a.nozzleTemps.length > 1) ? (n.id === 1 ? ' G' : ' D') : ''} ${Math.round(n.temp)}°${n.target ? '/' + n.target + '°' : ''}`), a.bed ? `plateau ${Math.round(a.bed.temp)}°${a.bed.target ? '/' + a.bed.target + '°' : ''}` : ''].filter(Boolean).join(' · ');
+  const sg = a.job ? suggestModel({title: a.job}) : null, m = sg && state.models.find(x => x.id === sg.id);
+  let model = '';
+  if (m) { const c = computeCost(m), p = modelPrice(m, c); model = `<div class="meta" style="margin-top:4px">🛍️ « ${esc(m.name)} » : coût ${eur(c.total)} · vente ${eur(p * c.pcs)} · bénéfice prévu <b class="pos">${eur(p * c.pcs - c.total)}</b></div>`; }
+  return `<div class="live${st === 'FAILED' ? ' fail' : ''}">
+    <div><b>${esc(a.job || 'Impression')}</b> · ${STATE_FR[st] || st}</div>
+    ${a.progress != null ? `<div class="bar"><i style="width:${a.progress}%"></i></div>` : ''}
+    <div class="meta">${a.progress != null ? `<b>${a.progress} %</b>` : ''}${a.layers ? ` · couche ${a.layer}/${a.layers}` : ''}${a.remaining ? ` · reste ${dur(a.remaining / 60)} · fin vers ${end}` : ''}</div>
+    ${temps ? `<div class="meta">🌡 ${temps}</div>` : ''}
+    ${model}
+    ${a.hms?.length || a.error ? `<div class="meta neg" style="margin-top:4px">⚠️ L'imprimante signale ${a.hms?.length ? a.hms.length + ' alerte' + (a.hms.length > 1 ? 's' : '') : 'une erreur'}${errCode ? ` (code ${errCode})` : ''} : regarde l'écran de l'imprimante ou Bambu Handy.</div>` : ''}
+  </div>`;
+}
+// actualisation toutes les minutes pendant qu'une impression tourne et que l'onglet est affiché
+setInterval(() => {
+  if (document.hidden || !cloud.logged || !$('spools').classList.contains('active') || $('secAms').hidden) return;
+  if ((bambu?.devices || []).some(d => ['RUNNING', 'PAUSE', 'PREPARE'].includes(d.ams?.state))) loadBambu(true);
+}, 60000);
+
+/* ---------- Boutique MakerWorld : chercher, voir le détail, calculer, envoyer vers Bambu Handy ---------- */
+const shop = {q: null, offset: 0, total: 0, hits: [], busy: false, seq: 0};
+const kNum = n => n >= 1000 ? (n / 1000).toLocaleString('fr-FR', {maximumFractionDigits: 1}) + ' k' : String(n);
+function openShop() {
+  if (!cloud.logged) { $('shopResults').innerHTML = cloud.on ? '<p class="hint">⏳ Connexion…</p>' : emptyState('🛍️', 'Boutique MakerWorld', 'Disponible sur la version en ligne, une fois connecté.'); return; }
+  if (shop.q === null && !shop.busy) shopSearch('');
+}
+async function shopSearch(q, more = false) {
+  if (more && shop.busy) return;
+  // une nouvelle recherche remplace celle en cours
+  const seq = ++shop.seq;
+  if (!more) { shop.q = q; shop.offset = 0; shop.total = 0; shop.hits = []; $('shopInfo').textContent = ''; $('shopResults').innerHTML = '<p class="hint">⏳ Recherche…</p>'; }
+  shop.busy = true; $('shopMore').disabled = true;
+  const only = $('shopSell').checked; let added = 0, pages = 0; shop.err = '';
+  try {
+    do {
+      const r = await api(`/api/makerworld?q=${encodeURIComponent(q)}&offset=${shop.offset}&limit=30${only ? '&sell=1' : ''}`);
+      if (seq !== shop.seq) return;
+      if (!r.ok) { shop.err = r.data?.error || 'MakerWorld ne répond pas.'; break; }
+      shop.total = r.data.total; shop.offset += 30; pages++;
+      const hits = r.data.hits.filter(h => !only || mwCommercial(h.license));
+      shop.hits.push(...hits); added += hits.length;
+      if (!r.data.hits.length) break;
+    } while (added < 12 && pages < 6 && shop.offset < shop.total);
+  } catch { if (seq !== shop.seq) return; shop.err = 'Serveur injoignable.'; }
+  shop.busy = false; $('shopMore').disabled = false; renderShop();
+}
+function renderShop() {
+  const only = $('shopSell').checked, list = only ? shop.hits.filter(h => mwCommercial(h.license)) : shop.hits;
+  $('shopInfo').textContent = shop.err ? '⚠️ ' + shop.err : shop.q ? `${shop.total.toLocaleString('fr-FR')} modèles${only ? ' revendables' : ''} sur MakerWorld` : `À la une sur MakerWorld${only ? ' · revendables' : ''}`;
+  $('shopResults').innerHTML = list.map(h => `<div class="mCard" data-mw="${h.id}" style="cursor:pointer">
+      <div class="mImg"><img src="${esc(h.cover)}" alt="" loading="lazy"><span class="mStock ${mwCommercial(h.license) ? 'ok' : ''}">${mwCommercial(h.license) ? '✓ revendable' : 'usage perso'}</span></div>
+      <div class="mBody"><h4>${esc(h.title)}</h4><div class="meta">par ${esc(h.creator)}</div><div class="meta">♥ ${kNum(h.likes)} · 🖨️ ${kNum(h.prints)}</div></div></div>`).join('')
+    || emptyState('🔍', 'Aucun modèle', only ? 'Aucun modèle revendable trouvé : décoche « Revendables seulement » ou change de mot.' : 'Essaie un autre mot.');
+  $('shopMore').hidden = shop.offset >= shop.total;
+}
+$('shopForm').onsubmit = e => { e.preventDefault(); shopSearch($('shopQ').value.trim()); };
+$('shopSell').onchange = () => shopSearch(shop.q || '');
+$('shopMore').onclick = () => shopSearch(shop.q || '', true);
+$('shopResults').addEventListener('click', e => { const c = e.target.closest('[data-mw]'); if (c) openShopDetail(+c.dataset.mw); });
+
+let sd = null, sdSel = {inst: null, plate: 'all'};
+async function openShopDetail(id) {
+  $('shopList').hidden = true; $('shopDetail').hidden = false; window.scrollTo({top: 0});
+  $('shopDetail').innerHTML = '<div class="card"><p class="hint" style="margin:0">⏳ Chargement du modèle…</p></div>';
+  const r = await api('/api/makerworld?id=' + id).catch(() => null);
+  if (!r?.ok || !r.data.instances?.length) { $('shopDetail').innerHTML = `<button class="link" data-back>‹ Retour</button><div class="card"><p class="hint" style="margin:0">${esc(r?.data?.error || 'Ce modèle n’a pas de profil d’impression publié.')}</p></div>`; return; }
+  sd = r.data;
+  const pick = sd.instances.find(i => i.id === sd.defaultInstanceId) || sd.instances.find(i => i.isDefault) || [...sd.instances].sort((a, b) => b.prints - a.prints)[0];
+  sdSel = {inst: pick.id, plate: 'all'}; renderShopDetail();
+}
+// Profil (et plateau) MakerWorld → calcul de coût, comme un fichier tranché
+function mwJob(d, inst, pv) {
+  const plates = pv === 'all' ? inst.plates : [inst.plates[+pv]];
+  const secs = pv === 'all' ? (inst.seconds || plates.reduce((a, p) => a + p.seconds, 0)) : plates[0].seconds;
+  const merged = [];
+  for (const f of (plates.length ? plates.flatMap(p => p.filaments) : inst.filaments)) {
+    const m = merged.find(x => baseMat(x.material) === baseMat(f.type) && x.color.toLowerCase() === f.color.slice(0, 7).toLowerCase());
+    m ? m.grams += f.grams : merged.push({material: f.type, color: f.color.slice(0, 7), grams: f.grams, id: f.id});
+  }
+  const j = newJob(), mins = Math.round(secs / 60);
+  j.name = d.title; j.hours = Math.floor(mins / 60); j.minutes = mins % 60; j.pieces = 1;
+  j.filaments = merged.map(filFromFile);
+  j.printerId = state.settings.printerMode === 'file' ? printerFor({printer: inst.printer}) : defaultPrinterId();
+  j.thumb = (pv !== 'all' && plates[0]?.thumb) || inst.cover || d.cover; j.link = `https://makerworld.com/fr/models/${d.id}#profileId-${inst.id}`;
+  return j;
+}
+function renderShopDetail() {
+  const d = sd, inst = d.instances.find(i => i.id === sdSel.inst), j = mwJob(d, inst, sdSel.plate), c = computeCost(j), p = modelPrice(j, c);
+  const ok = mwCommercial(d.license), mine = state.printers.map(x => prCode(x.name).split(' ')[0]).filter(Boolean);
+  const compat = mine.map(code => `${inst.compat.some(x => x.toUpperCase() === code || x.toUpperCase().startsWith(code)) ? '✓' : '✗'} ${esc(code)}`).join(' · ');
+  const fils = j.filaments.map(l => { const sp = l.spoolId && spoolById(l.spoolId);
+    return `<div class="filLine"><span class="dot" style="width:18px;height:18px;background:${esc(l.color)}"></span><span>${esc(l.material)} · <b>${gr(l.grams)}</b></span>
+      <span class="st ${sp ? 'pos' : 'neg'}">${sp ? `✓ ${esc(sp.colorName || sp.material)}${sp.amsWhere ? ' · ' + esc(sp.amsWhere) : ' · réserve'} (${gr(sp.remaining)})` : '✗ pas dans ton stock'}</span></div>`; }).join('');
+  const chans = state.channels.filter(ch => ch.pct > 0).slice(0, 2).map(ch => `${esc(ch.name)} ${eur(channelPrice(ch, p))}`).join(' · ');
+  $('shopDetail').innerHTML = `<button class="link" data-back>‹ Retour aux résultats</button>
+    <div class="card">
+      <div class="gal">${(d.gallery.length ? d.gallery : [d.cover]).map(u => `<img src="${esc(u)}" alt="" loading="lazy">`).join('')}</div>
+      <h2 style="margin:0">${esc(d.title)}</h2>
+      <div class="meta muted">par ${esc(d.creator)} · ♥ ${kNum(d.likes)} · 🖨️ ${kNum(d.prints)} impressions · ⬇ ${kNum(d.downloads)}</div>
+      <div class="licBox ${ok ? 'ok' : 'no'}">${ok ? `✓ Licence ${esc(d.license)} : la vente des impressions est autorisée (cite l’auteur).` : `⚠️ Licence « ${esc(d.license || 'inconnue')} » : usage personnel, la vente des impressions n’est en principe pas autorisée.`}</div>
+      ${d.tags.length || d.categories.length ? `<div class="tagRow">${[...d.categories, ...d.tags].slice(0, 8).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>` : ''}
+      ${d.summary ? `<details class="fold" style="margin-top:10px"><summary><span><b style="font-size:15px">Description</b></span></summary><p style="white-space:pre-line;margin:0;font-size:14px;line-height:1.5">${esc(d.summary)}</p></details>` : ''}
+    </div>
+    <div class="card">
+      <h3 class="mwH" style="margin-top:0">Profils d’impression <span class="hint">${d.instances.length} profil${d.instances.length > 1 ? 's' : ''}</span></h3>
+      <div class="pickRow">${d.instances.map(i => `<button type="button" class="pick${i.id === sdSel.inst ? ' on' : ''}" data-sinst="${i.id}">
+        ${i.cover ? `<img src="${esc(i.cover)}" alt="" loading="lazy">` : '<span class="ph2">🧊</span>'}
+        <b>${esc(i.title || 'Profil')}</b><span class="st"><strong>${dur(i.seconds / 3600)}</strong> · <strong>${gr(i.grams)}</strong></span>
+        <span class="st">${dots(i.filaments)} ${i.filaments.length} couleur${i.filaments.length > 1 ? 's' : ''}${i.ams ? ' · AMS' : ''}</span>
+        <span class="st">${esc(i.printer || '')}${i.prints ? ` · imprimé ${kNum(i.prints)}×` : ''}</span></button>`).join('')}</div>
+      ${inst.plates.length > 1 ? `<h3 class="mwH">Plateau</h3><div class="pickRow"><button type="button" class="pick plate${sdSel.plate === 'all' ? ' on' : ''}" data-splate="all">${inst.cover ? `<img src="${esc(inst.cover)}" alt="" loading="lazy">` : '<span class="ph2">🧊</span>'}<b>Tout le profil</b><span class="st"><strong>${dur(inst.seconds / 3600)}</strong> · <strong>${gr(inst.grams)}</strong></span></button>
+        ${inst.plates.map((pl, k) => `<button type="button" class="pick plate${sdSel.plate === String(k) ? ' on' : ''}" data-splate="${k}">${pl.thumb ? `<img src="${esc(pl.thumb)}" alt="" loading="lazy">` : '<span class="ph2">▦</span>'}<b>Plateau ${pl.index}${pl.name ? ' · ' + esc(pl.name) : ''}</b><span class="st"><strong>${dur(pl.seconds / 3600)}</strong> · <strong>${gr(pl.grams)}</strong></span></button>`).join('')}</div>` : ''}
+    </div>
+    <div class="shopActs">
+      <a class="btn primary" href="${esc(j.link)}" target="_blank" rel="noopener">📱 Imprimer avec Bambu Handy</a>
+      <button class="btn" data-sadd>➕ Catalogue</button>
+      <button class="btn" data-scalc>🧮 Calcul</button>
+    </div>
+    <div class="grid2 stack" style="align-items:start">
+      <div class="card"><div class="cardHead"><span class="badgeIcon">🖨️</span><h2>Fiche d’impression</h2></div>
+        <div class="kv"><span>Temps</span><b>${dur(c.h)}</b></div>
+        <div class="kv"><span>Filament</span><b>${gr(c.grams)}</b></div>
+        <div class="kv"><span>Plateaux</span><b>${sdSel.plate === 'all' ? Math.max(1, inst.plates.length) : 1}</b></div>
+        <div class="kv"><span>Préparé pour</span><b>${esc(inst.printer || '—')}${inst.ams ? ' · AMS' : ''}</b></div>
+        <div class="kv"><span>Tes imprimantes</span><b>${compat || '—'}</b></div>
+        <h3 style="margin:12px 0 4px">Filaments nécessaires</h3>${fils || '<p class="hint">—</p>'}
+      </div>
+      <div class="card"><div class="cardHead"><span class="badgeIcon">💶</span><h2>Rentabilité</h2></div>
+        <div class="kv"><span>Coût de revient</span><b>${eur(c.unit)}</b></div>
+        <div class="kv"><span>Prix conseillé</span><b>${eur(p)}</b></div>
+        <div class="kv total"><span>Bénéfice</span><b class="${p - c.unit >= 0 ? 'pos' : 'neg'}">${eur(p - c.unit)}</b></div>
+        ${chans ? `<p class="hint">Prix à afficher : ${chans}</p>` : ''}
+        <p class="hint">Calculé avec ta ${esc(state.printers.find(x => x.id === j.printerId)?.name || 'imprimante')}, tes bobines et tes réglages. Temps et grammes = ceux de l’auteur.</p>
+      </div>
+    </div>
+    <p class="hint">📱 « Imprimer avec Bambu Handy » ouvre ce profil sur MakerWorld : sur iPhone, Bambu Handy s’ouvre directement (ou touche « Ouvrir dans l’app »), choisis l’imprimante et lance.</p>`;
+}
+$('shopDetail').addEventListener('click', e => {
+  if (e.target.closest('[data-back]')) { $('shopDetail').hidden = true; $('shopList').hidden = false; return; }
+  const ib = e.target.closest('[data-sinst]'); if (ib) { sdSel = {inst: +ib.dataset.sinst, plate: 'all'}; renderShopDetail(); return; }
+  const pb = e.target.closest('[data-splate]'); if (pb) { sdSel.plate = pb.dataset.splate; renderShopDetail(); return; }
+  const inst = sd && sd.instances.find(i => i.id === sdSel.inst);
+  if (e.target.closest('[data-sadd]')) {
+    const j = mwJob(sd, inst, sdSel.plate), m = {...JSON.parse(JSON.stringify(j)), id: uid(), stock: 0, created: today()};
+    m.filaments = m.filaments.filter(l => num(l.grams) > 0).map(l => ({...l, pricePerKg: linePerKg(l)}));
+    state.models.unshift(m); (state.taskLinks ||= {})[normTitle(sd.title)] = m.id;
+    save(); toast(`✨ « ${m.name} » ajouté au catalogue`); confetti();
+    return;
+  }
+  if (e.target.closest('[data-scalc]')) {
+    mw = sd; mwSel = {...sdSel}; calcFile = null;
+    job = newJob(); job.link = `https://makerworld.com/fr/models/${sd.id}`; $('mwUrl').value = job.link;
+    $('mwBox').hidden = false; $('plateBox').hidden = true; $('estBox').hidden = true; $('fileInfo').hidden = true;
+    showTab('calc'); renderMwPicks(); applyMw(true); window.scrollTo({top: 0});
+  }
+});
+
 /* ---------- Navigation ---------- */
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
@@ -3106,7 +3303,7 @@ function showTab(name) {
   renderTab(name); updateSumBar(); updateSelBar();
   try { sessionStorage.setItem('pc3d-tab', name); } catch {}
 }
-function renderTab(name) { ({calc: () => { renderFils(); updateResult(); }, catalog: renderCatalog, sales: renderSales, spools: renderSpoolsTab, report: () => { renderReport(); loadHistory(); }})[name]?.(); }
+function renderTab(name) { ({calc: () => { renderFils(); updateResult(); }, catalog: renderCatalog, shop: openShop, sales: renderSales, spools: renderSpoolsTab, report: () => { renderReport(); loadHistory(); }})[name]?.(); }
 function renderAll() { renderTab(document.querySelector('.panel.active').id); }
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => { showTab(b.dataset.tab); window.scrollTo({top: 0}); });
 
