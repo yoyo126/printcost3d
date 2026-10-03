@@ -83,15 +83,27 @@ async function amsSnapshot(username, token, ids) {
 }
 
 const hex = c => c ? '#' + String(c).slice(0, 6) : '';
-function tray(t, slot) {
-  const uid = t.tag_uid || '';
-  return {slot, type: t.tray_type || '', color: hex(t.tray_color), remain: t.remain == null ? -1 : Number(t.remain),
-    weight: Number(t.tray_weight) || 0, rfid: !!uid && !/^0+$/.test(uid), uid, brand: t.tray_sub_brands || '', empty: !t.tray_type};
+const ZERO = /^0+$/;
+// Emplacement : AMS « A, B, C… » et numéro 1 à 4, comme dans Bambu Studio
+function tray(t, amsId, nozzle) {
+  const uuid = t.tray_uuid && !ZERO.test(t.tray_uuid) ? t.tray_uuid : '';
+  const weight = Number(t.tray_weight) || 0, remain = t.remain == null ? -1 : Number(t.remain);
+  const grams = Number(t.remain_g) >= 0 && t.remain_g != null ? Number(t.remain_g) : (remain >= 0 && weight ? Math.round(remain * weight / 100) : null);
+  return {ams: amsId, slot: Number(t.id) + 1, index: amsId == null ? null : amsId * 4 + Number(t.id), nozzle,
+    type: t.tray_type || '', brand: t.tray_sub_brands || '', color: hex(t.tray_color), remain, grams, weight,
+    rfid: !!uuid, uuid, empty: !t.tray_type};
 }
-function normPrinter(p = {}) {
-  const units = (p.ams?.ams || []).map(u => ({id: u.id, humidity: u.humidity, trays: (u.tray || []).map(t => tray(t, `${u.id}-${t.id}`))}));
-  const ext = [p.vt_tray, ...(Array.isArray(p.vir_slot) ? p.vir_slot : [])].filter(Boolean).map((t, i) => tray(t, `ext-${t.id ?? i}`));
-  return {units, ext, state: p.gcode_state || '', progress: p.mc_percent ?? null, job: p.subtask_name || ''};
+const nozzleOf = info => { const n = (parseInt(info, 16) >> 8) & 0xF; return Number.isFinite(n) ? n : null; };
+export function normPrinter(p = {}) {
+  const units = (p.ams?.ams || []).map(u => {
+    const id = Number(u.id), nozzle = nozzleOf(u.info);
+    return {id, letter: String.fromCharCode(65 + id), nozzle, humidity: u.humidity_raw != null && u.humidity_raw !== '' ? Number(u.humidity_raw) : null,
+      temp: u.temp != null ? Number(u.temp) : null, trays: (u.tray || []).map(t => tray(t, id, nozzle))};
+  });
+  const ext = [p.vt_tray, ...(Array.isArray(p.vir_slot) ? p.vir_slot : [])].filter(t => t && t.tray_type).map(t => ({...tray(t, null, null), ext: true}));
+  const now = Number(p.ams?.tray_now);
+  return {units, ext, active: Number.isFinite(now) && now < 254 ? now : null, nozzles: (p.device?.extruder?.info || []).length || 1,
+    state: p.gcode_state || '', progress: p.mc_percent ?? null, job: p.subtask_name || ''};
 }
 
 async function status() {
@@ -109,7 +121,9 @@ async function status() {
     id: String(t.id), title: t.title || t.designTitle || '', device: t.deviceId, deviceName: t.deviceName || '',
     status: t.status, start: t.startTime, end: t.endTime, weight: Number(t.weight) || 0, minutes: Math.round((Number(t.costTime) || 0) / 60),
     plate: t.plateIndex ?? null,
-    ams: (t.amsDetailMapping || []).map(m => ({type: m.filamentType || m.targetFilamentType || '', color: hex(m.sourceColor || m.targetColor), weight: Number(m.weight) || 0, ams: m.ams ?? null})),
+    // « ams » = numéro global de l'emplacement (AMS × 4 + emplacement) ; targetColor = couleur de la bobine utilisée
+    ams: (t.amsDetailMapping || []).map(m => ({type: m.filamentType || m.targetFilamentType || '', color: hex(m.targetColor || m.sourceColor),
+      weight: Number(m.weight) || 0, index: m.ams ?? null, letter: m.ams != null && m.ams < 64 ? String.fromCharCode(65 + Math.floor(m.ams / 4)) + (m.ams % 4 + 1) : '', nozzle: m.nozzleId ?? null})),
   }));
 
   let raw = {}, amsError = null;

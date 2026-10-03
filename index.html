@@ -284,6 +284,22 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 .trays{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .tray{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--card2);border:1px solid var(--line);font-size:12.5px}
 .tray.empty{opacity:.55}
+.amsBox{margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:16px;background:var(--card2)}
+.amsHead{font-size:12.5px;color:var(--muted);margin-bottom:8px}
+.amsHead b{color:var(--ink);font-family:var(--display);font-size:15px;margin-right:4px}
+.slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.slot{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;font-size:12.5px;line-height:1.4;min-width:0}
+.slot.on{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.slot.low .g{color:var(--bad)}
+.slot.vide{opacity:.55}
+.slotTop{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.slotId{font-weight:800;font-family:var(--display);font-size:14px}
+.dotBig{width:22px;height:22px;border-radius:50%;box-shadow:0 0 0 1.5px var(--line);flex:none}
+.slot .name{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot .g{font-family:var(--display);font-weight:800;font-size:16px}
+.slot .link{font-size:12px;padding:4px 0;text-align:left}
+.slot .inStock{color:var(--ok);font-weight:650;font-size:12px}
+@media (max-width:680px){.slots{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .movedBanner{margin-bottom:14px}
 
 @media (max-width:680px){
@@ -1182,7 +1198,7 @@ function filFromFile(f) {
   const cost = fileCfg?.costs?.[(f.id || 1) - 1];
   return {spoolId: sp?.id || '', material: f.material, color: f.color, grams: Math.round(f.grams * 100) / 100, pricePerKg: sp ? spoolPerKg(sp) : cost > 0 ? cost : state.settings.defaultFilamentPrice, fromFile: true};
 }
-const spoolLabel = s => `${s.material}${s.colorName ? ' · ' + s.colorName : ''}${s.brand ? ' · ' + s.brand : ''} (${gr(s.remaining)} · ${eur(spoolPerKg(s))}/kg)`;
+const spoolLabel = s => `${s.material}${s.colorName ? ' · ' + s.colorName : ''}${s.amsWhere ? ' · ' + s.amsWhere : s.brand ? ' · ' + s.brand : ''} (${gr(s.remaining)} · ${eur(spoolPerKg(s))}/kg)`;
 
 function renderCalc() {
   $('jPrinter').innerHTML = state.printers.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
@@ -1622,6 +1638,7 @@ function renderSpools() {
       ${spoolSvg(s.color, ratio)}
       <div><h4>${esc(s.material)}${s.colorName ? ' · ' + esc(s.colorName) : ''}</h4>
         <div class="meta">${esc(s.brand || 'Marque ?')} · ${eur(s.price)} les ${gr(s.weight)}<br>${eur(spoolPerKg(s))}/kg${s.date ? ' · acheté le ' + fmtDate(s.date) : ''}</div>
+        ${s.amsWhere ? `<div style="margin-top:4px"><span class="pill brand">📍 ${esc(s.amsWhere)}</span>${s.amsUuid ? ' <span class="meta">restant lu sur l’imprimante</span>' : ''}</div>` : ''}
         <div class="priceTag"><b class="${isLow ? 'neg' : ''}">${gr(s.remaining)}</b><span class="meta">restants</span> ${s.remaining <= 0 ? '<span class="pill">vide</span>' : isLow ? '<span class="pill bad">bientôt vide</span>' : ''}</div>
         <div class="bar ${isLow ? 'low' : ''}"><i style="width:${ratio * 100}%"></i></div>
       </div></div>`;
@@ -1939,7 +1956,8 @@ async function loadBambu(force = false) {
     const r = await api('/api/bambu');
     bambu = r.ok ? r.data : {connected: false, error: r.data?.error || 'Erreur du serveur.'};
   } catch { bambu = {connected: false, error: 'Serveur injoignable.'}; }
-  bambuLoading = false; bambuAt = Date.now(); renderBambu();
+  bambuLoading = false; bambuAt = Date.now();
+  syncAmsToSpools(); renderBambu();
 }
 function renderBambu() {
   const box = $('bambuCard'); box.hidden = !cloud.logged; if (box.hidden) return;
@@ -1951,21 +1969,90 @@ function renderBambu() {
     return;
   }
   const devs = (bambu.devices || []).map(d => {
-    const trays = d.ams ? [...d.ams.units.flatMap(u => u.trays), ...d.ams.ext] : [];
-    const chips = trays.map(t => t.empty ? `<span class="tray empty">${esc(t.slot)} · vide</span>`
-      : `<span class="tray"><span class="dot" style="background:${esc(t.color || '#999')}"></span>${esc(t.type)} ${t.remain >= 0 ? `<b>${t.remain} %</b>${t.weight ? ` ≈ ${gr(t.remain * t.weight / 100)}` : ''}` : '<span class="muted">quantité inconnue</span>'}</span>`).join('');
-    const running = d.ams?.state === 'RUNNING' ? ` · impression ${d.ams.progress ?? ''} %${d.ams.job ? ' : ' + esc(d.ams.job) : ''}` : '';
+    const a = d.ams, dual = a?.nozzles > 1;
+    const slot = (t, label) => {
+      if (t.empty) return `<div class="slot vide"><div class="slotTop"><span class="slotId">${label}</span><span class="dotBig" style="background:var(--line)"></span></div>vide</div>`;
+      const sp = spoolForTray(t, d.id), low = t.grams != null && t.grams < state.settings.lowStock;
+      return `<div class="slot${a?.active === t.index && t.index != null ? ' on' : ''}${low ? ' low' : ''}">
+        <div class="slotTop"><span class="slotId">${label}</span><span class="dotBig" style="background:${esc(t.color || '#999')}"></span></div>
+        <div class="name" title="${esc(t.brand || t.type)}">${esc(t.brand || t.type)}</div>
+        ${t.grams != null ? `<div class="g">${gr(t.grams)}</div>${t.remain >= 0 ? `<div class="muted">${t.remain} %</div>` : ''}` : '<div class="muted">quantité inconnue<br>(sans puce Bambu)</div>'}
+        ${sp ? `<div class="inStock">✓ dans ton stock</div>` : `<button class="link" data-add="${esc(d.id)}|${t.ext ? 'ext' : t.index}">＋ Ajouter au stock</button>`}
+      </div>`;
+    };
+    const units = a ? a.units.map(u => `<div class="amsBox"><div class="amsHead"><b>AMS ${u.letter}</b>${dual && u.nozzle != null ? ` · buse ${u.nozzle === 1 ? 'gauche' : 'droite'}` : ''}${u.humidity != null ? ` · 💧 ${u.humidity} %` : ''}${u.temp != null ? ` · ${fr(u.temp)} °C` : ''}</div>
+        <div class="slots">${u.trays.map(t => slot(t, u.letter + t.slot)).join('')}</div></div>`).join('')
+      + (a.ext.length ? `<div class="amsBox"><div class="amsHead"><b>Bobine externe</b></div><div class="slots">${a.ext.map(t => slot(t, 'Ext')).join('')}</div></div>` : '') : '';
+    const running = a?.state === 'RUNNING' ? ` · impression ${a.progress ?? ''} %${a.job ? ' : ' + esc(a.job) : ''}` : '';
     return `<div class="bDev"><b>${esc(d.name)}</b> <span class="muted">${esc(d.model)}</span> <span class="pill ${d.online ? 'ok' : ''}">${d.online ? 'en ligne' : 'hors ligne'}</span><span class="muted">${running}</span>
-      <div class="trays">${chips || `<span class="hint" style="margin:0">${d.online ? 'AMS non lu.' : 'Imprimante hors ligne : AMS non lu.'}</span>`}</div></div>`;
+      ${units || `<p class="hint" style="margin:6px 0 0">${d.online ? 'AMS non lu.' : 'Imprimante hors ligne : AMS non lu.'}</p>`}</div>`;
   }).join('') || '<p class="hint">Aucune imprimante trouvée sur ce compte.</p>';
+  const unlinked = allTrays().filter(({t, dev}) => !t.empty && !spoolForTray(t, dev)).length;
+  const devName = id => bambu.devices.find(d => d.id === id)?.name || '';
   const tasks = (bambu.tasks || []).slice(0, 8).map(t => `<tr><td>${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) : ''}</td>
-    <td>${esc(t.title)}<div class="hint" style="margin:0">${esc(t.deviceName || '')}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''}</div></td><td class="n">${gr(t.weight)}</td><td class="n">${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</td></tr>`).join('');
-  box.innerHTML = head + `<p class="hint" style="margin-top:0">Compte ${esc(bambu.account || '')} · <button class="link" id="bLogout">Déconnecter</button></p>${devs}
+    <td>${esc(t.title)}<div class="hint" style="margin:0">${esc(t.deviceName || devName(t.device))}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''}</div>
+      <div class="trays" style="margin-top:4px">${t.ams.map(m => `<span class="tray"><span class="dot" style="background:${esc(m.color || '#999')}"></span>${esc(m.letter || m.type)} · ${gr(m.weight)}</span>`).join('')}</div></td>
+    <td class="n">${gr(t.weight)}</td><td class="n">${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</td></tr>`).join('');
+  box.innerHTML = head + `<p class="hint" style="margin-top:0">Compte ${esc(bambu.account || '')} · <button class="link" id="bLogout">Déconnecter</button></p>
+    ${unlinked ? `<div class="notice" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🧵 ${unlinked} bobine${unlinked > 1 ? 's' : ''} de l’AMS pas encore dans ton stock. <button class="btn small primary" id="bAddAll">Tout ajouter au stock</button></div>` : ''}
+    ${devs}
     ${bambu.amsError ? `<div class="notice warn">AMS non lu : ${esc(bambu.amsError)}</div>` : ''}
     ${tasks ? `<h3 style="margin-top:14px">Dernières impressions</h3><div class="tableWrap"><table><tbody>${tasks}</tbody></table></div>` : ''}
-    <p class="hint">Les pourcentages viennent de l’AMS : ils ne sont connus que pour les bobines Bambu à puce.</p>`;
+    <p class="hint">Les quantités viennent de l’imprimante, seulement pour les bobines Bambu à puce (la H2D les donne en grammes, la P2S en %). Les bobines du stock reliées à l’AMS se mettent à jour toutes seules.</p>`;
+}
+// Une bobine Bambu à puce est reconnue partout par son identifiant ; une bobine sans puce par son emplacement.
+const trayKey = (t, devId) => `${devId}:${t.ext ? 'ext' : t.index}`;
+function allTrays() {
+  const out = [];
+  for (const d of bambu?.devices || []) if (d.ams) {
+    for (const u of d.ams.units) for (const t of u.trays) out.push({t, dev: d.id, where: `${d.name} · ${u.letter}${t.slot}`});
+    for (const t of d.ams.ext) out.push({t, dev: d.id, where: `${d.name} · externe`});
+  }
+  return out;
+}
+function spoolForTray(t, devId) {
+  if (t.empty) return null;
+  return t.uuid ? state.spools.find(s => s.amsUuid === t.uuid) : state.spools.find(s => !s.amsUuid && s.amsLoc === trayKey(t, devId));
+}
+function spoolFromTray({t, dev, where}) {
+  const weight = t.weight || 1000;
+  return {id: uid(), material: t.brand || t.type || 'PLA', brand: t.rfid ? 'Bambu Lab' : '', colorName: '', color: t.color || '#999999',
+    price: Math.round(state.settings.defaultFilamentPrice * weight / 10) / 100, weight, remaining: t.grams ?? weight, date: today(),
+    amsUuid: t.uuid || '', amsLoc: trayKey(t, dev), amsWhere: where};
+}
+// Met à jour le stock avec ce que disent les imprimantes (emplacement + restant des bobines à puce)
+function syncAmsToSpools() {
+  if (!bambu?.devices) return;
+  let changed = false;
+  const seen = new Set();
+  for (const x of allTrays()) {
+    const sp = spoolForTray(x.t, x.dev); if (!sp) continue;
+    seen.add(sp.id);
+    const upd = {amsWhere: x.where, amsLoc: trayKey(x.t, x.dev)};
+    if (x.t.rfid && x.t.grams != null) upd.remaining = x.t.grams;
+    for (const [k, v] of Object.entries(upd)) if (sp[k] !== v) { sp[k] = v; changed = true; }
+  }
+  for (const sp of state.spools) if (sp.amsWhere && !seen.has(sp.id) && (sp.amsUuid || sp.amsLoc)) {
+    // bobine reliée mais plus dans aucun AMS lu (sortie, ou imprimante hors ligne)
+    const devOk = bambu.devices.some(d => d.ams && sp.amsLoc?.startsWith(d.id + ':'));
+    if (devOk) { sp.amsWhere = ''; changed = true; }
+  }
+  if (changed) { save(); if (document.querySelector('.panel.active')?.id === 'spools') renderSpools(); }
 }
 $('bambuCard').addEventListener('click', async e => {
+  const add = e.target.closest('[data-add]');
+  if (add) {
+    const [dev, idx] = add.dataset.add.split('|');
+    const x = allTrays().find(y => y.dev === dev && String(y.t.ext ? 'ext' : y.t.index) === idx);
+    if (x && !spoolForTray(x.t, x.dev)) { state.spools.push(spoolFromTray(x)); save(); renderSpools(); renderBambu(); toast('🧵 Bobine ajoutée au stock : pense à vérifier son prix'); }
+    return;
+  }
+  if (e.target.id === 'bAddAll') {
+    const list = allTrays().filter(({t, dev}) => !t.empty && !spoolForTray(t, dev));
+    list.forEach(x => state.spools.push(spoolFromTray(x)));
+    save(); renderSpools(); renderBambu(); toast(`🧵 ${list.length} bobine${list.length > 1 ? 's' : ''} ajoutée${list.length > 1 ? 's' : ''} : vérifie leurs prix`);
+    return;
+  }
   if (e.target.id === 'bConnect') openBambuLogin();
   if (e.target.id === 'bRefresh') loadBambu(true);
   if (e.target.id === 'bLogout' && confirm('Déconnecter ton compte Bambu de PrintCost 3D ?')) {
