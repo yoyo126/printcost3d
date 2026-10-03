@@ -1,0 +1,10 @@
+{
+  "name": "printcost3d",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "mqtt": "^5.10.1"
+  }
+}

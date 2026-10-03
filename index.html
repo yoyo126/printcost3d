@@ -273,6 +273,18 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 .toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-20px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:16px;font-weight:650;opacity:0;transition:.25s;pointer-events:none;z-index:90;max-width:90vw;box-shadow:0 12px 30px #0003}
 .toast.show{opacity:1;transform:translateX(-50%)}
 #confetti{position:fixed;inset:0;pointer-events:none;z-index:85}
+.headRight{display:flex;align-items:center;gap:8px}
+#cloudBadge{white-space:nowrap}
+.gate{position:fixed;inset:0;z-index:95;display:grid;place-items:center;padding:20px;background:
+  radial-gradient(900px 420px at 0% -8%,var(--glow1),transparent 62%),radial-gradient(800px 380px at 100% 0%,var(--glow2),transparent 60%),var(--bg)}
+.gateCard{width:min(100%,400px);background:var(--card);border:1px solid var(--line);border-radius:26px;padding:26px;box-shadow:var(--shadow);display:grid;gap:12px}
+.gateCard .logo{width:56px;height:56px}
+.gateCard h2{margin:6px 0 0;font-size:24px}
+.bDev{padding:12px 0;border-bottom:1px dashed var(--line)}
+.trays{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tray{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--card2);border:1px solid var(--line);font-size:12.5px}
+.tray.empty{opacity:.55}
+.movedBanner{margin-bottom:14px}
 
 @media (max-width:680px){
   .app{padding:14px 14px calc(96px + env(safe-area-inset-bottom))}
@@ -311,8 +323,10 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
         <rect x="14" y="50" width="36" height="5" rx="2.5" fill="#fff" opacity=".56"/></svg>
       <div><h1>PrintCost <span>3D</span></h1><p>Imprime, chiffre, vends.</p></div>
     </div>
-    <button class="iconBtnRound" id="settingsBtn" aria-label="Réglages" title="Réglages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button>
+    <div class="headRight"><span id="cloudBadge" class="pill" hidden></span>
+    <button class="iconBtnRound" id="settingsBtn" aria-label="Réglages" title="Réglages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button></div>
   </header>
+  <div id="movedBanner" class="notice movedBanner" hidden></div>
   <nav>
     <button class="tab active" data-tab="calc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M8.5 7.5h7M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/></svg>Calcul</button>
     <button class="tab" data-tab="catalog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg>Catalogue</button>
@@ -432,6 +446,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 
   <!-- FILAMENTS -->
   <section id="spools" class="panel">
+    <div class="card" id="bambuCard" hidden></div>
     <div class="toolbar"><span class="hint" id="spoolSummary" style="margin:0"></span><button class="btn primary" id="newSpool">＋ Ajouter une bobine</button></div>
     <div id="spoolList" class="items"></div>
     <label class="check" style="margin-top:14px"><input type="checkbox" id="showEmpty"> Afficher les bobines vides</label>
@@ -490,6 +505,11 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   <p class="hint">Commission en % du prix + frais fixes par commande. Valeurs relevées en octobre 2026, à vérifier si une plateforme change ses conditions.</p>
   <div class="listEdit" id="channelEdit"></div>
   <button class="link" type="button" id="addChannel">＋ Ajouter un canal</button>
+  <div id="accountBox" hidden>
+    <h3>Compte en ligne</h3>
+    <p class="hint">Tes données sont enregistrées dans ton compte et synchronisées entre tes appareils.</p>
+    <button class="btn" type="button" id="logoutBtn">Se déconnecter de cet appareil</button>
+  </div>
   <h3>Sauvegarde</h3>
   <p class="hint">Les données restent dans ce navigateur, sur cet appareil. Exporte régulièrement une sauvegarde pour ne rien perdre ou pour passer d'un appareil à l'autre.</p>
   <div class="grid3">
@@ -555,6 +575,35 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 </form></dialog>
 
 <div class="dropOverlay" aria-hidden="true"><div>Lâche ton fichier ici<small>3MF ou STL</small></div></div>
+<!-- Connexion au compte en ligne -->
+<div id="gate" class="gate" hidden>
+  <form id="gateForm" class="gateCard">
+    <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6c4cff"/><stop offset=".55" stop-color="#a14dff"/><stop offset="1" stop-color="#ff5c93"/></linearGradient></defs>
+      <rect width="64" height="64" rx="17" fill="url(#lg2)"/><path d="M25 9h14v8l-5 7h-4l-5-7z" fill="#fff"/><rect x="31" y="24" width="2" height="7" rx="1" fill="#fff"/>
+      <rect x="14" y="36" width="20" height="5" rx="2.5" fill="#fff"/><rect x="14" y="43" width="36" height="5" rx="2.5" fill="#fff" opacity=".78"/><rect x="14" y="50" width="36" height="5" rx="2.5" fill="#fff" opacity=".56"/></svg>
+    <h2 id="gateTitle">Connexion</h2>
+    <p class="hint" id="gateHint" style="margin:0"></p>
+    <label id="gateCodeWrap" hidden>Code de création<input id="gateCode" autocomplete="one-time-code" autocapitalize="off" spellcheck="false"></label>
+    <label>Mot de passe<input id="gatePw" type="password" autocomplete="current-password"></label>
+    <label id="gatePw2Wrap" hidden>Confirme le mot de passe<input id="gatePw2" type="password" autocomplete="new-password"></label>
+    <p id="gateErr" class="neg" style="font-weight:650;margin:0;min-height:1.2em"></p>
+    <button class="btn primary" id="gateBtn">Entrer</button>
+  </form>
+</div>
+
+<!-- Compte Bambu -->
+<dialog id="dlgBambu"><form method="dialog" id="fBambu">
+  <div class="dHead"><h2>Connecter ton compte Bambu Lab</h2><button class="iconBtn" value="cancel" formnovalidate aria-label="Fermer">✕</button></div>
+  <p class="hint" style="margin-top:0">Accès en lecture seulement (AMS, historique des impressions). Ton e-mail et ton mot de passe Bambu sont transmis directement à Bambu et ne sont pas enregistrés.</p>
+  <div id="bStep1" class="grid2">
+    <label class="full">E-mail Bambu<input name="account" type="email" autocomplete="username"></label>
+    <label class="full">Mot de passe Bambu<input name="password" type="password" autocomplete="current-password"></label>
+  </div>
+  <div id="bStep2" hidden><label>Code reçu<input name="code" inputmode="numeric" autocomplete="one-time-code"></label><p class="hint" id="bCodeHint"></p></div>
+  <p id="bErr" class="neg" style="font-weight:650;min-height:1.2em"></p>
+  <div class="dFoot"><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Continuer</button></div>
+</form></dialog>
+
 <div class="toast" id="toast" role="status"></div>
 <canvas id="confetti" aria-hidden="true"></canvas>
 
@@ -634,10 +683,17 @@ function load() {
   return s;
 }
 let state = load();
-function save() {
+function writeLocal() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); return true; }
   catch (e) { alert('Impossible d’enregistrer : le stockage du navigateur est plein ou bloqué. Exporte une sauvegarde depuis les Réglages.'); return false; }
 }
+function save() {
+  if (!writeLocal()) return false;
+  if (typeof cloudQueue === 'function') cloudQueue();
+  return true;
+}
+// Élément supprimé : mémorisé pour qu'un autre appareil ne le fasse pas réapparaître
+function trash(id) { (state.trash ||= {})[id] = Date.now(); }
 
 /* ---------- Calculs ---------- */
 function roundPrice(x) {
@@ -1418,7 +1474,7 @@ $('catList').addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const m = state.models.find(x => x.id === b.dataset.id); if (!m) return;
   if (b.dataset.act === 'edit') { job = JSON.parse(JSON.stringify(m)); loadedPlates = []; est = null; lastObjs = 0; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); showTab('calc'); window.scrollTo(0, 0); }
-  if (b.dataset.act === 'del' && confirm(`Supprimer « ${m.name} » du catalogue ? Les ventes déjà enregistrées sont conservées.`)) { state.models = state.models.filter(x => x !== m); save(); renderAll(); }
+  if (b.dataset.act === 'del' && confirm(`Supprimer « ${m.name} » du catalogue ? Les ventes déjà enregistrées sont conservées.`)) { trash(m.id); state.models = state.models.filter(x => x !== m); save(); renderAll(); }
   if (b.dataset.act === 'stock') {
     const v = prompt(`Stock de « ${m.name} » (nombre de pièces prêtes à vendre) :`, m.stock || 0);
     if (v !== null && Number.isFinite(parseInt(v))) { m.stock = parseInt(v); save(); renderAll(); }
@@ -1431,7 +1487,7 @@ $('printLog').addEventListener('click', e => {
   const p = state.prints.find(x => x.id === b.dataset.undo); if (!p || !confirm('Annuler cette impression ? Le filament est remis sur les bobines et les pièces retirées du stock.')) return;
   for (const u of p.usage) { const s = spoolById(u.spoolId); if (s) s.remaining += u.grams; }
   const m = state.models.find(x => x.id === p.modelId); if (m && !p.failed) m.stock -= p.pieces;
-  state.prints = state.prints.filter(x => x !== p); save(); renderAll();
+  trash(p.id); state.prints = state.prints.filter(x => x !== p); save(); renderAll();
 });
 
 /* Impression */
@@ -1510,7 +1566,7 @@ $('newSale').onclick = () => openSale(null);
 $('delSale').onclick = () => {
   if (!editingSale || !confirm('Supprimer cette vente ? Les pièces reviennent en stock.')) return;
   const m = state.models.find(x => x.id === editingSale.modelId); if (m) m.stock += editingSale.qty;
-  state.sales = state.sales.filter(x => x !== editingSale); save(); $('dlgSale').close(); renderAll();
+  trash(editingSale.id); state.sales = state.sales.filter(x => x !== editingSale); save(); $('dlgSale').close(); renderAll();
 };
 $('fSale').addEventListener('submit', e => {
   if (e.submitter?.value !== 'save') return;
@@ -1587,7 +1643,7 @@ $('delSpool').onclick = () => {
   const used = state.models.filter(m => m.filaments.some(l => l.spoolId === editingSpool.id));
   if (!confirm(`Supprimer cette bobine ?${used.length ? `\n${used.length} modèle(s) du catalogue l’utilisent : ils garderont son dernier prix au kilo.` : ''}\nAstuce : une bobine terminée peut rester à 0 g pour garder l’historique.`)) return;
   for (const m of used) for (const l of m.filaments) if (l.spoolId === editingSpool.id) { l.pricePerKg = spoolPerKg(editingSpool); l.color = editingSpool.color; l.material = editingSpool.material; l.spoolId = ''; }
-  state.spools = state.spools.filter(x => x !== editingSpool); save(); $('dlgSpool').close(); renderAll();
+  trash(editingSpool.id); state.spools = state.spools.filter(x => x !== editingSpool); save(); $('dlgSpool').close(); renderAll();
 };
 $('fSpool').addEventListener('submit', e => {
   if (e.submitter?.value !== 'save') return;
@@ -1746,6 +1802,205 @@ $('wipeBtn').onclick = () => {
   state = defaultState(); save(); $('dlgSettings').close(); job = newJob(); renderAll(); renderCalc(); toast('Données effacées');
 };
 
+/* ---------- Compte en ligne et synchronisation ---------- */
+// Sans serveur (GitHub Pages, fichier ouvert en local), l'outil reste en mode « cet appareil seulement ».
+const cloud = {on: false, logged: false, version: 0, busy: false, again: false, timer: null};
+const LS_V = 'pc3d-cloud-v', LS_DIRTY = 'pc3d-dirty';
+const isDirty = () => { try { return localStorage.getItem(LS_DIRTY) === '1'; } catch { return false; } };
+const setDirty = v => { try { localStorage.setItem(LS_DIRTY, v ? '1' : '0'); } catch {} };
+const hasLocalData = () => ['models', 'spools', 'sales', 'prints'].some(k => state[k]?.length);
+async function api(path, opts = {}) {
+  const r = await fetch(path, {method: opts.method || 'GET', credentials: 'same-origin',
+    headers: opts.body ? {'Content-Type': 'application/json'} : {}, body: opts.body ? JSON.stringify(opts.body) : undefined});
+  let data = null; try { data = await r.json(); } catch {}
+  return {status: r.status, ok: r.ok, data};
+}
+function setCloud(s) {
+  const b = $('cloudBadge'); b.hidden = !cloud.on || !cloud.logged; if (b.hidden) return;
+  const m = {ok: ['ok', '☁️ Synchronisé'], wait: ['', '⏳ Envoi…'], err: ['warn', '⚠️ Hors ligne']}[s] || ['', ''];
+  b.className = 'pill ' + m[0]; b.textContent = m[1];
+}
+function normalizeState(d) { const base = defaultState(); return {...base, ...d, settings: {...base.settings, ...d.settings}}; }
+// Fusion après une modification faite ailleurs : on garde tout, cet appareil gagne pour un même élément,
+// les suppressions (corbeille) sont appliquées des deux côtés.
+function mergeStates(server, local) {
+  if (!server) return local;
+  const trash = {...(server.trash || {}), ...(local.trash || {})}, limit = Date.now() - 120 * 864e5;
+  for (const k in trash) if (trash[k] < limit) delete trash[k];
+  const out = {...normalizeState(server), ...local, trash};
+  for (const k of ['spools', 'models', 'prints', 'sales']) {
+    const localIds = new Set((local[k] || []).map(x => x.id));
+    out[k] = [...(server[k] || []).filter(x => !localIds.has(x.id)), ...(local[k] || [])].filter(x => !trash[x.id]);
+  }
+  return out;
+}
+function applyRemote(data, version) {
+  state = normalizeState(data); cloud.version = version;
+  writeLocal(); try { localStorage.setItem(LS_V, String(version)); } catch {}
+  renderAll();
+}
+function cloudQueue() {
+  if (!cloud.logged) return;
+  setDirty(true); setCloud('wait');
+  clearTimeout(cloud.timer); cloud.timer = setTimeout(cloudPush, 700);
+}
+async function cloudPush() {
+  if (!cloud.logged) return;
+  if (cloud.busy) { cloud.again = true; return; }
+  cloud.busy = true;
+  try {
+    for (let i = 0; i < 4; i++) {
+      const r = await api('/api/state', {method: 'PUT', body: {data: state, baseVersion: cloud.version}});
+      if (r.ok) { cloud.version = r.data.version; try { localStorage.setItem(LS_V, String(cloud.version)); } catch {} setDirty(false); setCloud('ok'); return; }
+      if (r.status === 409) { state = mergeStates(r.data.data, state); cloud.version = r.data.version; writeLocal(); renderAll(); continue; }
+      if (r.status === 401) { showGate(false); return; }
+      setCloud('err'); return;
+    }
+    setCloud('err');
+  } catch { setCloud('err'); }
+  finally { cloud.busy = false; if (cloud.again) { cloud.again = false; cloudPush(); } }
+}
+async function cloudPull() {
+  if (!cloud.logged || cloud.busy) return;
+  let r; try { r = await api('/api/state'); } catch { setCloud('err'); return; }
+  if (r.status === 401) { showGate(false); return; }
+  if (!r.ok) { setCloud('err'); return; }
+  const {data, version} = r.data;
+  let firstTime = false; try { firstTime = localStorage.getItem(LS_V) === null; } catch {}
+  const dirty = isDirty() || (firstTime && hasLocalData());
+  if (!data) { cloudQueue(); return; }                       // compte encore vide : on y met cet appareil
+  if (dirty) { state = mergeStates(data, state); cloud.version = version; writeLocal(); renderAll(); cloudQueue(); return; }
+  if (version !== cloud.version || firstTime) applyRemote(data, version);
+  setCloud('ok');
+}
+let gateMode = 'login';
+function showGate(setup) {
+  cloud.logged = false; setCloud();
+  gateMode = setup ? 'setup' : 'login';
+  $('gate').hidden = false;
+  $('gateTitle').textContent = setup ? 'Bienvenue 👋' : 'Connexion';
+  $('gateHint').textContent = setup ? 'Première ouverture : entre le code de création, puis choisis ton mot de passe (8 caractères minimum).' : 'Entre ton mot de passe PrintCost 3D.';
+  $('gateCodeWrap').hidden = $('gatePw2Wrap').hidden = !setup;
+  $('gatePw').autocomplete = setup ? 'new-password' : 'current-password';
+  $('gateBtn').textContent = setup ? 'Créer mon compte' : 'Entrer';
+  setTimeout(() => (setup ? $('gateCode') : $('gatePw')).focus(), 60);
+}
+$('gateForm').onsubmit = async e => {
+  e.preventDefault();
+  $('gateErr').textContent = '';
+  if (gateMode === 'setup' && $('gatePw').value !== $('gatePw2').value) { $('gateErr').textContent = 'Les deux mots de passe ne sont pas identiques.'; return; }
+  $('gateBtn').disabled = true;
+  try {
+    const r = await api('/api/auth', {method: 'POST', body: {action: gateMode, password: $('gatePw').value, code: $('gateCode').value}});
+    if (!r.ok) { $('gateErr').textContent = r.data?.error || 'Connexion impossible.'; return; }
+    $('gatePw').value = $('gatePw2').value = $('gateCode').value = '';
+    $('gate').hidden = true; cloud.logged = true; $('accountBox').hidden = false;
+    await cloudPull();
+  } catch { $('gateErr').textContent = 'Serveur injoignable, vérifie ta connexion.'; }
+  finally { $('gateBtn').disabled = false; }
+};
+$('logoutBtn').onclick = async () => {
+  if (!confirm('Se déconnecter de cet appareil ? Les données restent dans ton compte.')) return;
+  if (isDirty()) await cloudPush();
+  await api('/api/auth', {method: 'POST', body: {action: 'logout'}});
+  try { [KEY, LS_V, LS_DIRTY].forEach(k => localStorage.removeItem(k)); } catch {}
+  state = defaultState(); job = newJob(); cloud.version = 0; bambu = null;
+  $('dlgSettings').close(); renderCalc(); renderAll(); showGate(false);
+};
+async function cloudInit() {
+  if (location.protocol === 'file:') return showMoved();
+  let r; try { r = await api('/api/auth'); } catch { return showMoved(); }
+  if (!r.ok || typeof r.data?.setupNeeded !== 'boolean') return showMoved();
+  cloud.on = true;
+  try { cloud.version = +localStorage.getItem(LS_V) || 0; } catch {}
+  if (!r.data.logged) return showGate(r.data.setupNeeded);
+  cloud.logged = true; $('accountBox').hidden = false;
+  await cloudPull();
+  addEventListener('focus', () => { if (!isDirty()) cloudPull(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !isDirty()) cloudPull(); });
+  setInterval(() => { if (!document.hidden && !isDirty()) cloudPull(); }, 60000);
+}
+const ONLINE_URL = 'https://printcost3d.vercel.app';
+function showMoved() {
+  if (!location.hostname.endsWith('github.io')) return;
+  $('movedBanner').hidden = false;
+  $('movedBanner').innerHTML = `☁️ PrintCost 3D a une version en ligne avec synchronisation entre ton téléphone et ton ordinateur : <a href="${ONLINE_URL}" style="font-weight:700;color:var(--brand-ink)">${ONLINE_URL.replace('https://', '')}</a>.
+    Pour y retrouver tes données : Réglages › Exporter ici, puis Réglages › Importer là-bas.`;
+}
+
+/* ---------- Imprimantes Bambu (lecture du cloud Bambu) ---------- */
+let bambu = null, bambuAt = 0, bambuLoading = false;
+const TASK_STATUS = {1: 'en cours', 2: 'terminée', 3: 'échouée', 4: 'annulée'};
+async function loadBambu(force = false) {
+  if (!cloud.logged) { $('bambuCard').hidden = true; return; }
+  if (bambuLoading || (!force && bambu && Date.now() - bambuAt < 60000)) return renderBambu();
+  bambuLoading = true; renderBambu();
+  try {
+    const r = await api('/api/bambu');
+    bambu = r.ok ? r.data : {connected: false, error: r.data?.error || 'Erreur du serveur.'};
+  } catch { bambu = {connected: false, error: 'Serveur injoignable.'}; }
+  bambuLoading = false; bambuAt = Date.now(); renderBambu();
+}
+function renderBambu() {
+  const box = $('bambuCard'); box.hidden = !cloud.logged; if (box.hidden) return;
+  const head = `<div class="cardHead"><span class="badgeIcon">🛰️</span><h2>Imprimantes Bambu</h2>${bambu?.connected ? `<button class="link" id="bRefresh" style="margin-left:auto">${bambuLoading ? '⏳ Lecture…' : '↻ Actualiser'}</button>` : ''}</div>`;
+  if (!bambu) { box.innerHTML = head + '<p class="hint" style="margin:0">⏳ Lecture de ton compte Bambu…</p>'; return; }
+  if (!bambu.connected) {
+    box.innerHTML = head + `<p class="hint" style="margin-top:0">${bambu.expired ? '⚠️ La connexion à ton compte Bambu a expiré. ' : ''}${bambu.error ? esc(bambu.error) + ' ' : ''}Connecte ton compte Bambu Lab pour voir ce qu’il reste dans l’AMS de tes imprimantes et l’historique de tes impressions (lecture seulement).</p>
+      <button class="btn primary" id="bConnect">Connecter mon compte Bambu</button>`;
+    return;
+  }
+  const devs = (bambu.devices || []).map(d => {
+    const trays = d.ams ? [...d.ams.units.flatMap(u => u.trays), ...d.ams.ext] : [];
+    const chips = trays.map(t => t.empty ? `<span class="tray empty">${esc(t.slot)} · vide</span>`
+      : `<span class="tray"><span class="dot" style="background:${esc(t.color || '#999')}"></span>${esc(t.type)} ${t.remain >= 0 ? `<b>${t.remain} %</b>${t.weight ? ` ≈ ${gr(t.remain * t.weight / 100)}` : ''}` : '<span class="muted">quantité inconnue</span>'}</span>`).join('');
+    const running = d.ams?.state === 'RUNNING' ? ` · impression ${d.ams.progress ?? ''} %${d.ams.job ? ' : ' + esc(d.ams.job) : ''}` : '';
+    return `<div class="bDev"><b>${esc(d.name)}</b> <span class="muted">${esc(d.model)}</span> <span class="pill ${d.online ? 'ok' : ''}">${d.online ? 'en ligne' : 'hors ligne'}</span><span class="muted">${running}</span>
+      <div class="trays">${chips || `<span class="hint" style="margin:0">${d.online ? 'AMS non lu.' : 'Imprimante hors ligne : AMS non lu.'}</span>`}</div></div>`;
+  }).join('') || '<p class="hint">Aucune imprimante trouvée sur ce compte.</p>';
+  const tasks = (bambu.tasks || []).slice(0, 8).map(t => `<tr><td>${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) : ''}</td>
+    <td>${esc(t.title)}<div class="hint" style="margin:0">${esc(t.deviceName || '')}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''}</div></td><td class="n">${gr(t.weight)}</td><td class="n">${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</td></tr>`).join('');
+  box.innerHTML = head + `<p class="hint" style="margin-top:0">Compte ${esc(bambu.account || '')} · <button class="link" id="bLogout">Déconnecter</button></p>${devs}
+    ${bambu.amsError ? `<div class="notice warn">AMS non lu : ${esc(bambu.amsError)}</div>` : ''}
+    ${tasks ? `<h3 style="margin-top:14px">Dernières impressions</h3><div class="tableWrap"><table><tbody>${tasks}</tbody></table></div>` : ''}
+    <p class="hint">Les pourcentages viennent de l’AMS : ils ne sont connus que pour les bobines Bambu à puce.</p>`;
+}
+$('bambuCard').addEventListener('click', async e => {
+  if (e.target.id === 'bConnect') openBambuLogin();
+  if (e.target.id === 'bRefresh') loadBambu(true);
+  if (e.target.id === 'bLogout' && confirm('Déconnecter ton compte Bambu de PrintCost 3D ?')) {
+    await api('/api/bambu', {method: 'POST', body: {action: 'logout'}}); bambu = {connected: false}; renderBambu();
+  }
+});
+let bStep = 'login', bTfaKey = '';
+function openBambuLogin() {
+  bStep = 'login'; bTfaKey = ''; $('fBambu').reset();
+  $('bStep1').hidden = false; $('bStep2').hidden = true; $('bErr').textContent = '';
+  $('dlgBambu').showModal();
+}
+$('fBambu').addEventListener('submit', async e => {
+  if (e.submitter?.value !== 'save') return;
+  e.preventDefault();
+  const f = $('fBambu'), btn = e.submitter;
+  $('bErr').textContent = ''; btn.disabled = true;
+  try {
+    const body = bStep === 'login' ? {action: 'login', account: f.account.value.trim(), password: f.password.value}
+      : {action: bStep, account: f.account.value.trim(), code: f.code.value, tfaKey: bTfaKey};
+    if (bStep === 'login' && (!body.account || !body.password)) { $('bErr').textContent = 'Entre ton e-mail et ton mot de passe Bambu.'; return; }
+    const r = await api('/api/bambu', {method: 'POST', body});
+    if (!r.ok) { $('bErr').textContent = r.data?.error || 'Connexion impossible.'; return; }
+    f.password.value = '';
+    if (r.data.step) {
+      bStep = r.data.step; bTfaKey = r.data.tfaKey || '';
+      $('bStep1').hidden = true; $('bStep2').hidden = false;
+      $('bCodeHint').textContent = bStep === 'code' ? 'Bambu vient de t’envoyer un code par e-mail.' : 'Entre le code de ton application de double authentification.';
+      f.code.focus(); return;
+    }
+    $('dlgBambu').close(); toast('🛰️ Compte Bambu connecté'); loadBambu(true);
+  } catch { $('bErr').textContent = 'Serveur injoignable.'; }
+  finally { btn.disabled = false; }
+});
+
 /* ---------- Navigation ---------- */
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
@@ -1753,13 +2008,14 @@ function showTab(name) {
   renderTab(name); updateSumBar();
   try { sessionStorage.setItem('pc3d-tab', name); } catch {}
 }
-function renderTab(name) { ({calc: () => { renderFils(); updateResult(); }, catalog: renderCatalog, sales: renderSales, spools: renderSpools, report: renderReport})[name]?.(); }
+function renderTab(name) { ({calc: () => { renderFils(); updateResult(); }, catalog: renderCatalog, sales: renderSales, spools: () => { renderSpools(); loadBambu(); }, report: renderReport})[name]?.(); }
 function renderAll() { renderTab(document.querySelector('.panel.active').id); }
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => { showTab(b.dataset.tab); window.scrollTo({top: 0}); });
 
 job = newJob();
 renderCalc();
 try { const t = sessionStorage.getItem('pc3d-tab'); if (t && $(t)) showTab(t); } catch {}
+cloudInit();
 </script>
 </body>
 </html>
