@@ -22,8 +22,10 @@ export default async function handler(req, res) {
         id: i.id, title: (i.titleTranslated || i.title || '').trim(), isDefault: !!i.isDefault,
         seconds: Number(i.prediction) || 0, grams: Number(i.weight) || 0,
         filaments: (i.instanceFilaments || []).map(fil),
-        printer: mi.compatibility?.devProductName || '', cover: i.cover || '',
+        printer: mi.compatibility?.devProductName || '', cover: i.cover || i.pictures?.[0]?.url || '',
+        prints: Number(i.printCount) || 0, ams: !!i.needAms,
         plates: (mi.plates || []).map(p => ({index: p.index, name: p.name || '', seconds: Number(p.prediction) || 0, grams: Number(p.weight) || 0,
+          thumb: p.thumbnail?.url || p.pick_picture?.url || p.top_picture?.url || '',
           objects: (p.objects || []).length, filaments: (p.filaments || []).map(fil)})),
       };
     }).filter(i => i.seconds > 0 || i.grams > 0);
