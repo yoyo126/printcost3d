@@ -655,6 +655,14 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <label>Restant (g)<input name="remaining" type="number" step="any" required inputmode="numeric"><small>Pour une bobine neuve, mets le poids net.</small></label>
     <label>Date d'achat<input name="date" type="date"></label>
   </div>
+  <div id="trackBox" class="notice" hidden style="margin-top:12px">
+    <b>📈 Suivi automatique (bobine sans puce dans l'AMS)</b>
+    <div class="grid2" style="margin-top:8px">
+      <label>Mise dans l'AMS le<input name="trackDate" type="date"></label>
+      <label>Quantité à ce moment (g)<input name="trackBase" type="number" min="0" step="any" inputmode="numeric"></label>
+    </div>
+    <small class="hint" id="trackInfo">Le restant se calcule avec les grammes de chaque impression faite depuis cet emplacement (historique Bambu).</small>
+  </div>
   <label id="spoolCountWrap" style="margin-top:12px">Nombre de bobines identiques<input name="count" type="number" min="1" step="1" value="1" inputmode="numeric"><small>Pour un lot : crée autant de bobines que nécessaire.</small></label>
   <div class="dFoot"><button class="btn danger" type="button" id="delSpool">Supprimer</button><span style="flex:1"></span><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Enregistrer</button></div>
 </form></dialog>
@@ -1776,6 +1784,7 @@ function updatePrintPreview() {
   const lines = printUsage(m, n).map(u => {
     const s = spoolById(u.spoolId);
     if (!s) return `${gr(u.grams)} de ${esc(u.material)} (aucune bobine liée, rien n'est déduit)`;
+    if (s.trackFrom) return `<span class="dot" style="background:${esc(s.color)}"></span> ${gr(u.grams)} sur ${esc(spoolLabel(s).replace(/ \(.*/, ''))} : déduit automatiquement par l'historique Bambu`;
     const left = s.remaining - u.grams;
     return `<span class="dot" style="background:${esc(s.color)}"></span> ${gr(u.grams)} sur ${esc(spoolLabel(s).replace(/ \(.*/, ''))} → reste <b class="${left < 0 ? 'neg' : ''}">${gr(left)}</b>`;
   });
@@ -1788,7 +1797,8 @@ $('fPrint').addEventListener('input', updatePrintPreview);
 $('fPrint').addEventListener('submit', e => {
   if (e.submitter?.value !== 'save') return;
   const f = $('fPrint'), m = printModel, n = Math.max(1, parseInt(f.plates.value) || 1), c = computeCost(m), failed = f.failed.checked;
-  const usage = printUsage(m, n).filter(u => spoolById(u.spoolId));
+  // les bobines sans puce suivies par l'historique Bambu sont déduites automatiquement : pas de double comptage
+  const usage = printUsage(m, n).filter(u => spoolById(u.spoolId) && !spoolById(u.spoolId).trackFrom);
   for (const u of usage) spoolById(u.spoolId).remaining -= u.grams;
   if (!failed) m.stock = (m.stock || 0) + c.pcs * n;
   state.prints.unshift({id: uid(), date: f.date.value || today(), modelId: m.id, name: m.name, plates: n, pieces: failed ? 0 : c.pcs * n, failed,
@@ -1901,7 +1911,7 @@ function renderSpools() {
       ${spoolSvg(s.color, ratio)}
       <div><h4>${esc(s.material)}${s.colorName ? ' · ' + esc(s.colorName) : ''}</h4>
         <div class="meta">${esc(s.brand || 'Marque ?')}${s.ref ? ' · réf. ' + esc(s.ref) : ''} · ${eur(s.price)} les ${gr(s.weight)}<br>${eur(spoolPerKg(s))}/kg${s.date ? ' · acheté le ' + fmtDate(s.date) : ''}</div>
-        ${s.amsWhere ? `<div style="margin-top:4px"><span class="pill brand">📍 ${esc(s.amsWhere)}</span>${s.amsUuid ? ' <span class="meta">restant lu sur l’imprimante</span>' : ''}</div>` : ''}
+        ${s.amsWhere ? `<div style="margin-top:4px"><span class="pill brand">📍 ${esc(s.amsWhere)}</span>${s.amsUuid ? ' <span class="meta">restant lu sur l’imprimante</span>' : s.trackFrom ? ` <span class="meta">restant calculé : ${gr(s.trackUsed || 0)} utilisés depuis le ${fmtDate(new Date(s.trackFrom).toLocaleDateString('sv'))}</span>` : ''}</div>` : ''}
         <div class="priceTag"><b class="${isLow ? 'neg' : ''}">${gr(s.remaining)}</b><span class="meta">restants</span> ${s.remaining <= 0 ? '<span class="pill">vide</span>' : isLow ? '<span class="pill bad">bientôt vide</span>' : ''}</div>
         <div class="bar ${isLow ? 'low' : ''}"><i style="width:${ratio * 100}%"></i></div>
       </div></div>`;
@@ -1918,12 +1928,23 @@ function openSpool(s) {
   setBrandOptions(d.brand);
   if (!cat.brands) fetch('catalogue/marques.json').then(r => r.json()).then(j => { cat.brands = j; setBrandOptions(f.brand.value); }).catch(() => {});
   ['colorName', 'color', 'price', 'weight', 'remaining', 'date', 'ref'].forEach(k => f[k].value = d[k] ?? '');
-  f.count.value = 1; $('spoolCountWrap').hidden = !!s;
+  f.count.value = 1; $('spoolCountWrap').hidden = !!s || !!pendingTray;
   $('catPick').hidden = !!s;
+  // bobine sans puce reliée (ou à relier) à un emplacement de l'AMS : suivi par l'historique
+  const tracked = (s && s.amsLoc && !s.amsUuid) || pendingTray;
+  $('trackBox').hidden = !tracked;
+  if (tracked) {
+    f.trackDate.value = s?.trackFrom ? new Date(s.trackFrom).toLocaleDateString('sv') : today();
+    f.trackBase.value = s?.trackFrom ? (s.trackBase ?? s.remaining) : (s?.remaining ?? d.weight ?? 1000);
+    $('trackInfo').textContent = s?.trackFrom ? `${gr(s.trackUsed || 0)} utilisés depuis le ${fmtDate(f.trackDate.value)} d'après l'historique Bambu.` : 'Le restant se calculera avec les grammes de chaque impression faite depuis cet emplacement (historique Bambu).';
+  }
+  spoolOpenVals = {remaining: f.remaining.value, trackDate: f.trackDate.value, trackBase: f.trackBase.value};
   $('dlgSpool').showModal();
   if (!s) openCatalogPicker();
 }
+let spoolOpenVals = {}, pendingTray = null;
 $('fSpool').weight.addEventListener('input', e => { if (!editingSpool) $('fSpool').remaining.value = e.target.value; });
+$('dlgSpool').addEventListener('close', () => { pendingTray = null; });
 $('delSpool').onclick = () => {
   if (!editingSpool) return;
   const used = state.models.filter(m => m.filaments.some(l => l.spoolId === editingSpool.id));
@@ -1936,9 +1957,18 @@ $('fSpool').addEventListener('submit', e => {
   const f = $('fSpool');
   const data = {material: f.material.value.trim() || 'PLA', brand: f.brand.value.trim(), ref: f.ref.value.trim(), colorName: f.colorName.value.trim(), color: f.color.value,
     price: num(f.price.value), weight: Math.max(1, num(f.weight.value)), remaining: num(f.remaining.value), date: f.date.value};
-  const n = editingSpool ? 1 : Math.min(50, Math.max(1, parseInt(f.count.value) || 1));
+  const n = editingSpool || pendingTray ? 1 : Math.min(50, Math.max(1, parseInt(f.count.value) || 1));
+  if (!$('trackBox').hidden) {
+    const dateChanged = f.trackDate.value !== spoolOpenVals.trackDate || f.trackBase.value !== spoolOpenVals.trackBase;
+    if (pendingTray || dateChanged || !editingSpool?.trackFrom) {
+      data.trackFrom = new Date((f.trackDate.value || today()) + 'T00:00').toISOString(); data.trackBase = num(f.trackBase.value);
+    } else if (f.remaining.value !== spoolOpenVals.remaining) { data.trackFrom = new Date().toISOString(); data.trackBase = data.remaining; }
+    if (pendingTray) Object.assign(data, {amsLoc: trayKey(pendingTray.t, pendingTray.dev), amsWhere: pendingTray.where, amsUuid: ''});
+  }
   if (editingSpool) Object.assign(editingSpool, data); else for (let i = 0; i < n; i++) state.spools.push({id: uid(), ...data});
-  save(); renderAll(); toast(n > 1 ? `🧵 ${n} bobines ajoutées` : '🧵 Bobine enregistrée');
+  pendingTray = null;
+  save(); trackChipless(); renderAll(); toast(n > 1 ? `🧵 ${n} bobines ajoutées` : '🧵 Bobine enregistrée');
+  if (!$('trackBox').hidden && !hist) loadHistory().then(() => { trackChipless(); renderAll(); });
 });
 
 /* ---------- Catalogue de filaments (Bambu Lab + SpoolmanDB), chargé seulement quand on l'ouvre ---------- */
@@ -1994,10 +2024,29 @@ function fillSpoolFromCatalog(brand, c) {
   setBrandOptions(brand); f.ref.value = c.ref || ''; f.colorName.value = c.name; f.color.value = '#' + (c.hexes[0] || '999999').toLowerCase();
   $('refHint').textContent = c.ref ? `✓ ${brand} ${c.material} ${c.name}` : 'Code de l’étiquette : la fiche se remplit toute seule.';
   f.weight.value = c.weight || 1000; f.remaining.value = c.weight || 1000;
+  if (!$('trackBox').hidden) f.trackBase.value = c.weight || 1000;
   // prix : celui de ta dernière bobine identique (marque + matière), sinon le prix par défaut au kilo
   const last = [...state.spools].reverse().find(s => s.brand === brand && baseMat(s.material) === baseMat(c.material) && s.price > 0);
   f.price.value = last ? (spoolPerKg(last) * (c.weight || 1000) / 1000).toFixed(2) : (state.settings.defaultFilamentPrice * (c.weight || 1000) / 1000).toFixed(2);
   f.price.focus();
+}
+// Bobines sans puce reliées à un emplacement : restant = quantité de départ − grammes pris à cet emplacement depuis la mise en place
+function trackChipless() {
+  const tasks = new Map([...(hist?.tasks || []), ...(bambu?.tasks || [])].map(t => [t.id, t]));
+  let changed = false;
+  for (const sp of state.spools) {
+    if (sp.amsUuid || !sp.amsLoc || !sp.trackFrom) continue;
+    const [dev, idx] = sp.amsLoc.split(':'), from = Date.parse(sp.trackFrom);
+    let used = 0;
+    for (const t of tasks.values()) {
+      const end = Date.parse(t.end || t.start || ''); if (!end || t.device !== dev || t.status === 1 || end <= from) continue;
+      for (const m of t.ams || []) if (String(m.index) === idx) used += num(m.weight);
+    }
+    const rem = Math.round((num(sp.trackBase) - used) * 10) / 10;
+    if (sp.remaining !== rem || sp.trackUsed !== used) { sp.remaining = rem; sp.trackUsed = Math.round(used * 10) / 10; changed = true; }
+  }
+  if (changed) save();
+  return changed;
 }
 // Bobine Bambu de l'AMS → entrée du catalogue (identifiant filament + code couleur lus sur la puce)
 function bambuCatEntry(t) {
@@ -2042,6 +2091,7 @@ async function loadHistory(full = false) {
   } catch { $('prodInfo').textContent = 'Serveur injoignable.'; }
   renderProd();
   if (!$('secHist').hidden) renderHist();
+  if (trackChipless()) { if (!$('secStock').hidden) renderSpools(); if (!$('secAms').hidden) renderBambu(); }
 }
 const periodKey = (d, p) => { const y = d.slice(0, 4), m = +d.slice(5, 7); return p === 'm' ? d.slice(0, 7) : p === 't' ? `${y}-T${Math.ceil(m / 3)}` : p === 's' ? `${y}-S${m <= 6 ? 1 : 2}` : y; };
 const periodLabel = (k, p) => p === 'm' ? monthLabel(k) : p === 't' ? `${k.slice(-1) === '1' ? '1er' : k.slice(-1) + 'e'} trimestre ${k.slice(0, 4)}` : p === 's' ? `${k.slice(-1) === '1' ? '1er' : '2e'} semestre ${k.slice(0, 4)}` : k;
@@ -2388,7 +2438,7 @@ async function loadBambu(force = false) {
   } catch { bambu = {connected: false, error: 'Serveur injoignable.'}; }
   bambuLoading = false; bambuAt = Date.now();
   await catLoad('Bambu Lab').catch(() => {});
-  syncAmsToSpools(); renderBambu();
+  syncAmsToSpools(); if (trackChipless() && !$('secStock').hidden) renderSpools(); renderBambu();
 }
 function renderBambu() {
   const box = $('bambuCard'); box.hidden = !cloud.logged; if (box.hidden) return;
@@ -2407,7 +2457,7 @@ function renderBambu() {
       return `<div class="slot${a?.active === t.index && t.index != null ? ' on' : ''}${low ? ' low' : ''}">
         <div class="slotTop"><span class="slotId">${label}</span><span class="dotBig" style="background:${esc(t.color || '#999')}"></span></div>
         <div class="name" title="${esc(t.brand || t.type)}">${esc(t.brand || t.type)}</div>
-        ${t.grams != null ? `<div class="g">${gr(t.grams)}</div>${t.remain >= 0 ? `<div class="muted">${t.remain} %</div>` : ''}` : '<div class="muted">quantité inconnue<br>(sans puce Bambu)</div>'}
+        ${t.grams != null ? `<div class="g">${gr(t.grams)}</div>${t.remain >= 0 ? `<div class="muted">${t.remain} %</div>` : ''}` : sp?.trackFrom ? `<div class="g">≈ ${gr(sp.remaining)}</div><div class="muted">calculé (historique)</div>` : '<div class="muted">quantité inconnue<br>(sans puce Bambu)</div>'}
         ${sp ? `<div class="inStock">✓ dans ton stock</div>` : `<button class="link" data-add="${esc(d.id)}|${t.ext ? 'ext' : t.index}">＋ Ajouter au stock</button>`}
       </div>`;
     };
@@ -2494,6 +2544,7 @@ function syncAmsToSpools() {
     const upd = {amsWhere: x.where, amsLoc: trayKey(x.t, x.dev)};
     if (!sp.colorName && bambuColorName(x.t)) upd.colorName = bambuColorName(x.t);
     if (!sp.ref && bambuCatEntry(x.t)?.ref) upd.ref = bambuCatEntry(x.t).ref;
+    if (!x.t.rfid && !sp.trackFrom) { upd.trackFrom = new Date().toISOString(); upd.trackBase = sp.remaining; }
     if (x.t.rfid && x.t.grams != null) upd.remaining = x.t.grams;
     for (const [k, v] of Object.entries(upd)) if (sp[k] !== v) { sp[k] = v; changed = true; }
   }
@@ -2545,11 +2596,17 @@ $('bambuCard').addEventListener('click', async e => {
   if (add) {
     const [dev, idx] = add.dataset.add.split('|');
     const x = allTrays().find(y => y.dev === dev && String(y.t.ext ? 'ext' : y.t.index) === idx);
+    if (x && !x.t.rfid && !spoolForTray(x.t, x.dev)) {
+      pendingTray = x; const sp = spoolFromTray(x); sp.brand = ''; openSpool(null);
+      const f = $('fSpool'); f.material.innerHTML = matOptions(sp.material); f.color.value = sp.color; f.weight.value = 1000; f.remaining.value = 1000; f.trackBase.value = 1000;
+      $('spoolTitle').textContent = `Bobine sans puce · ${x.where}`;
+      return;
+    }
     if (x && !spoolForTray(x.t, x.dev)) { state.spools.push(spoolFromTray(x)); save(); renderSpools(); renderBambu(); toast('🧵 Bobine ajoutée au stock : pense à vérifier son prix'); }
     return;
   }
   if (e.target.id === 'bAddAll') {
-    const list = allTrays().filter(({t, dev}) => !t.empty && !spoolForTray(t, dev));
+    const list = allTrays().filter(({t, dev}) => !t.empty && t.rfid && !spoolForTray(t, dev));
     list.forEach(x => state.spools.push(spoolFromTray(x)));
     save(); renderSpools(); renderBambu(); toast(`🧵 ${list.length} bobine${list.length > 1 ? 's' : ''} ajoutée${list.length > 1 ? 's' : ''} : vérifie leurs prix`);
     return;
