@@ -59,7 +59,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 .logo .layer-new{transform-box:view-box;transform-origin:14px 36px;animation:layer 2.6s ease-in-out infinite alternate}
 @keyframes nozzle{from{transform:translateX(-18px)}to{transform:translateX(18px)}}
 @keyframes layer{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-h1{margin:0;font-size:26px;font-weight:800;line-height:1}
+h1{margin:0;font-size:26px;font-weight:800;line-height:1;white-space:nowrap}
 h1 span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 header p{margin:4px 0 0;color:var(--muted);font-size:13.5px}
 .iconBtnRound{width:44px;height:44px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;box-shadow:var(--shadow);cursor:pointer}
@@ -311,6 +311,12 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 .cBtn.on{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
 .cBtn .sw{width:24px;height:24px;border-radius:50%;flex:none;box-shadow:0 0 0 1.5px var(--line)}
 .cBtn span:last-child{overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.linkRow{display:flex;gap:8px;margin:-4px 0 14px}
+.linkRow input{margin:0;flex:1;min-width:0}
+.linkRow .btn{white-space:nowrap}
+.mwHead{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.mwHead img{width:64px;height:64px;border-radius:14px;object-fit:cover;background:var(--card2);flex:none}
+.mwHead b{display:block;font-family:var(--display);font-size:16px;line-height:1.25}
 .catPick{background:var(--card2);border:1px solid var(--line);border-radius:18px;padding:12px;margin-bottom:14px}
 .catPick h3{margin:0 0 8px}
 .slot .inStock{color:var(--ok);font-weight:650;font-size:12px}
@@ -409,6 +415,15 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
         </div>
         <div id="fileInfo" class="fileInfo" hidden></div>
         <div id="splitBox" class="notice" hidden style="margin-top:-6px;margin-bottom:14px"></div>
+        <form class="linkRow" id="mwForm"><input id="mwUrl" type="url" inputmode="url" autocomplete="off" placeholder="🔗 …ou colle un lien MakerWorld"><button class="btn" id="mwGo">Calculer</button></form>
+        <div id="mwBox" class="card" hidden>
+          <div class="mwHead"><img id="mwImg" alt=""><div style="min-width:0"><b id="mwTitle"></b><span class="hint" id="mwMeta" style="margin:2px 0 0"></span></div></div>
+          <div class="grid2">
+            <label class="full">Profil d'impression<select id="mwInst"></select></label>
+            <label class="full">Plateau<select id="mwPlate"></select></label>
+          </div>
+          <p class="hint" id="mwNote"></p>
+        </div>
         <div id="plateBox" class="card" hidden><label>Plateau<select id="plateSel"></select></label></div>
 
         <div id="estBox" class="card" hidden>
@@ -1318,7 +1333,7 @@ $('addFil').onclick = () => { job.filaments.push(blankFil()); renderFils(); upda
   .forEach(([id, k]) => $(id).addEventListener('input', () => { job[k] = $(id).value; updateResult(); }));
 // Entrée = champ suivant, sans aller chercher le suivant à la main
 $('calc').addEventListener('keydown', e => {
-  if (e.key !== 'Enter' || e.target.tagName !== 'INPUT' || e.target.type === 'file') return;
+  if (e.key !== 'Enter' || e.target.tagName !== 'INPUT' || e.target.type === 'file' || e.target.id === 'mwUrl') return;
   e.preventDefault();
   const fields = [...$('calc').querySelectorAll('input:not([type=file]):not([type=checkbox]),select')].filter(x => x.offsetParent);
   const next = fields[fields.indexOf(e.target) + 1]; next ? next.focus() : e.target.blur();
@@ -1410,6 +1425,7 @@ async function handleFile(file) {
   const lower = file.name.toLowerCase();
   if (/\.(pdf|txt|md|png|jpe?g|webp|heic)$/.test(lower)) { importNotice([file]); $('asmCard').scrollIntoView({behavior: 'smooth', block: 'start'}); return; }
   $('plateBox').hidden = true; $('estBox').hidden = true; loadedPlates = []; est = null; lastObjs = 0; fileCfg = null;
+  mw = null; $('mwBox').hidden = true;
   if (!/\.(3mf|stl)$/.test(lower)) { setInfo(`${esc(file.name)} : format non reconnu. Choisis un fichier .3mf ou .stl (ou une notice PDF pour le montage).`, 'err'); return; }
   setInfo('⏳ Lecture du fichier…');
   const base = file.name.replace(/\.gcode\.3mf$/i, '').replace(/\.(3mf|stl)$/i, '');
@@ -1436,6 +1452,71 @@ async function handleFile(file) {
     startEstimate(mesh.tris, mesh.items, file.name, fileCfg);
   } catch (e) { console.error(e); setInfo(esc(e.message || 'Fichier illisible.'), 'err'); renderCalc(); }
 }
+/* ---------- Lien MakerWorld (ou lien direct vers un fichier) ---------- */
+let mw = null;
+const mwCommercial = lic => /\bCC0\b/i.test(lic) || /^(CC[- ])?BY(-SA|-ND)?(\s|$)/i.test(String(lic).trim());
+$('mwForm').onsubmit = async e => {
+  e.preventDefault();
+  const url = $('mwUrl').value.trim(); if (!url) return;
+  const id = (url.match(/models\/(\d+)/) || url.match(/^\s*(\d{4,})\s*$/) || [])[1];
+  const profile = (url.match(/profileId-(\d+)/) || [])[1];
+  $('mwGo').disabled = true;
+  try {
+    if (!id) return await fileFromUrl(url);
+    if (!cloud.logged) { setInfo('Le calcul depuis un lien MakerWorld fonctionne sur la version en ligne (printcost3d-gamma.vercel.app), une fois connecté.', 'err'); return; }
+    setInfo('⏳ Lecture du modèle sur MakerWorld…');
+    const r = await api('/api/makerworld?id=' + id);
+    if (!r.ok) { setInfo(esc(r.data?.error || 'MakerWorld ne répond pas.'), 'err'); return; }
+    if (!r.data.instances.length) { setInfo('Ce modèle n’a pas de profil d’impression publié : télécharge le fichier et dépose-le.', 'err'); return; }
+    mw = r.data;
+    $('mwImg').src = mw.cover; $('mwTitle').textContent = mw.title;
+    $('mwMeta').innerHTML = `${mw.creator ? 'par ' + esc(mw.creator) + ' · ' : ''}${mwCommercial(mw.license) ? `licence ${esc(mw.license)}` : `<span class="neg">⚠️ ${esc(mw.license || 'licence inconnue')} : vente en principe interdite</span>`}`;
+    $('mwInst').innerHTML = mw.instances.map(i => `<option value="${i.id}">${esc(i.title || 'Profil')} · ${dur(i.seconds / 3600)} · ${gr(i.grams)}${i.printer ? ' · ' + esc(i.printer) : ''}</option>`).join('');
+    const pick = mw.instances.find(i => String(i.id) === profile) || mw.instances.find(i => i.id === mw.defaultInstanceId) || mw.instances.find(i => i.isDefault) || mw.instances[0];
+    $('mwInst').value = pick.id;
+    $('mwBox').hidden = false; $('plateBox').hidden = true; $('estBox').hidden = true;
+    mwPlates(); applyMw(true);
+  } catch { setInfo('Lien illisible.', 'err'); }
+  finally { $('mwGo').disabled = false; }
+};
+function mwPlates() {
+  const inst = mw.instances.find(i => String(i.id) === $('mwInst').value);
+  $('mwPlate').innerHTML = `<option value="all">Tout le profil${inst.plates.length > 1 ? ` (${inst.plates.length} plateaux)` : ''}</option>`
+    + (inst.plates.length > 1 ? inst.plates.map((p, k) => `<option value="${k}">Plateau ${p.index}${p.name ? ' · ' + esc(p.name) : ''} · ${dur(p.seconds / 3600)} · ${gr(p.grams)}</option>`).join('') : '');
+}
+function applyMw(fresh = false) {
+  const inst = mw.instances.find(i => String(i.id) === $('mwInst').value), pv = $('mwPlate').value;
+  const plates = pv === 'all' ? inst.plates : [inst.plates[+pv]];
+  const secs = pv === 'all' ? (inst.seconds || plates.reduce((a, p) => a + p.seconds, 0)) : plates[0].seconds;
+  const merged = [];
+  for (const f of (plates.length ? plates.flatMap(p => p.filaments) : inst.filaments)) {
+    const m = merged.find(x => baseMat(x.material) === baseMat(f.type) && x.color.toLowerCase() === f.color.toLowerCase());
+    m ? m.grams += f.grams : merged.push({material: f.type, color: f.color.slice(0, 7), grams: f.grams, id: f.id});
+  }
+  const mins = Math.round(secs / 60);
+  job.hours = Math.floor(mins / 60); job.minutes = mins % 60; job.estimated = false; job.pieces = 1;
+  job.filaments = merged.map(filFromFile);
+  job.printerId = state.settings.printerMode === 'file' ? printerFor({printer: inst.printer}) : defaultPrinterId();
+  if (fresh || !job.name || job.name === autoName) { job.name = mw.title; autoName = mw.title; }
+  job.thumb = mw.cover; lastObjs = 0; loadedPlates = []; est = null; fileCfg = null;
+  $('mwNote').textContent = `Temps et grammes calculés par l’auteur${inst.printer ? ` pour une ${inst.printer}` : ''} : ils changent un peu selon l’imprimante et les réglages.`;
+  $('fileInfo').hidden = true;
+  $('mwNote').textContent = `✓ ${dur(secs / 3600)} · ${gr(merged.reduce((a, f) => a + f.grams, 0))} — ` + $('mwNote').textContent;
+  renderCalc();
+}
+$('mwInst').onchange = () => { mwPlates(); applyMw(); };
+$('mwPlate').onchange = () => applyMw();
+// Lien direct vers un .3mf / .stl : seulement si le site autorise la lecture depuis une autre page
+async function fileFromUrl(url) {
+  let u; try { u = new URL(url); } catch { setInfo('Ce n’est pas un lien valide.', 'err'); return; }
+  setInfo('⏳ Téléchargement du fichier…');
+  try {
+    const r = await fetch(u); if (!r.ok) throw new Error();
+    const name = decodeURIComponent(u.pathname.split('/').pop() || 'fichier.3mf');
+    await handleFile(new File([await r.blob()], /\.(3mf|stl)$/i.test(name) ? name : name + '.3mf'));
+  } catch { setInfo('Ce site ne laisse pas récupérer le fichier directement : télécharge-le puis dépose-le ici.', 'err'); }
+}
+
 function applyPlate(v) {
   const ps = v === 'all' ? loadedPlates : [loadedPlates[+v]];
   const secs = ps.reduce((a, p) => a + p.seconds, 0);
@@ -1508,7 +1589,7 @@ addEventListener('drop', e => {
   const f = e.dataTransfer.files[0]; if (f) { showTab('calc'); handleFile(f); }
 });
 
-$('resetJob').onclick = () => { job = newJob(); loadedPlates = []; est = null; autoName = ''; lastObjs = 0; fileCfg = null; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); window.scrollTo({top: 0}); };
+$('resetJob').onclick = () => { job = newJob(); loadedPlates = []; est = null; autoName = ''; lastObjs = 0; fileCfg = null; mw = null; $('mwBox').hidden = true; $('mwUrl').value = ''; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); window.scrollTo({top: 0}); };
 document.addEventListener('click', e => { if (e.target.id === 'cancelEdit') $('resetJob').click(); });
 $('saveModel').onclick = () => {
   job.name = job.name.trim() || 'Modèle sans nom';
@@ -1982,7 +2063,8 @@ async function api(path, opts = {}) {
 function setCloud(s) {
   const b = $('cloudBadge'); b.hidden = !cloud.on || !cloud.logged; if (b.hidden) return;
   const m = {ok: ['ok', '☁️ Synchronisé'], wait: ['', '⏳ Envoi…'], err: ['warn', '⚠️ Hors ligne']}[s] || ['', ''];
-  b.className = 'pill ' + m[0]; b.textContent = m[1];
+  b.className = 'pill ' + m[0]; b.title = m[1];
+  b.innerHTML = `${m[1].split(' ')[0]}<span class="hideSm"> ${m[1].split(' ').slice(1).join(' ')}</span>`;
 }
 function normalizeState(d) { const base = defaultState(); return {...base, ...d, settings: {...base.settings, ...d.settings}}; }
 // Fusion après une modification faite ailleurs : on garde tout, cet appareil gagne pour un même élément,
