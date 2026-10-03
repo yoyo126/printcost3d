@@ -1012,8 +1012,11 @@ function updateAsmTexts(c) {
 }
 // Notice : lecture du texte (PDF, txt) puis comptage des étapes et du matériel
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/';
-async function readNotice(files) {
+const TESS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js';
+// Lit le texte des notices ; les images et les pages scannées passent par la reconnaissance de texte (gratuite, dans le navigateur)
+async function readNotice(files, progress = () => {}) {
   let text = '', pages = 0, images = 0;
+  const toOcr = [];
   for (const f of files) {
     const low = f.name.toLowerCase();
     if (low.endsWith('.pdf') || f.type === 'application/pdf') {
@@ -1022,19 +1025,39 @@ async function readNotice(files) {
       const doc = await pdfjs.getDocument({data: new Uint8Array(await f.arrayBuffer())}).promise;
       pages += doc.numPages;
       for (let i = 1; i <= doc.numPages; i++) {
-        const items = (await (await doc.getPage(i)).getTextContent()).items;
-        let lastY = null, line = '';
+        const page = await doc.getPage(i), items = (await page.getTextContent()).items;
+        let lastY = null, line = '', pageText = '';
         for (const it of items) {
           const y = Math.round(it.transform[5]);
-          if (lastY !== null && Math.abs(y - lastY) > 2) { text += line + '\n'; line = ''; }
+          if (lastY !== null && Math.abs(y - lastY) > 2) { pageText += line + '\n'; line = ''; }
           line += it.str + ' '; lastY = y;
         }
-        text += line + '\n';
+        pageText += line + '\n';
+        if (pageText.replace(/\s/g, '').length < 20) toOcr.push(page); else text += pageText;
       }
-    } else if (f.type.startsWith('image/') || /\.(jpe?g|png|heic|webp|gif)$/.test(low)) images++;
+    } else if (f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/.test(low)) { images++; toOcr.push(f); }
     else text += (await f.text()) + '\n';
   }
-  return {text, pages, images};
+  let ocrDone = 0;
+  if (toOcr.length) {
+    const T = await import(TESS), createWorker = T.createWorker || T.default.createWorker;
+    const worker = await createWorker('fra+eng');
+    try {
+      for (const src of toOcr.slice(0, 20)) {
+        progress(`🔎 Lecture des images… ${ocrDone + 1} / ${Math.min(toOcr.length, 20)}`);
+        let img = src;
+        if (src.getViewport) { // page de PDF scannée → image
+          const vp = src.getViewport({scale: 2}), c = document.createElement('canvas');
+          c.width = vp.width; c.height = vp.height;
+          await src.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
+          img = c;
+        }
+        text += (await worker.recognize(img)).data.text + '\n';
+        ocrDone++;
+      }
+    } finally { await worker.terminate(); }
+  }
+  return {text, pages, images, ocr: ocrDone};
 }
 function analyseNotice(n) {
   const t = n.text.replace(/ /g, ' '), lines = t.split('\n');
@@ -1067,17 +1090,18 @@ async function importNotice(files) {
   $('aInfo').hidden = false; $('aInfo').className = 'notice'; $('aInfo').textContent = '⏳ Lecture de la notice…';
   fillAsmInputs(); updateResult();
   try {
-    const n = await readNotice(files), r = analyseNotice(n);
+    const n = await readNotice(files, msg => { $('aInfo').textContent = msg; }), r = analyseNotice(n);
     Object.assign(a, {steps: r.steps || '', screws: r.screws || '', inserts: r.inserts || '', magnets: r.magnets || '', glue: r.glue, minutes: '', notice: files.map(f => f.name).join(', ')});
     const found = [r.steps && `${r.steps} étape${r.steps > 1 ? 's' : ''}`, r.screws && `${r.screws} vis/écrous`, r.inserts && `${r.inserts} insert${r.inserts > 1 ? 's' : ''}`,
       r.magnets && `${r.magnets} aimant${r.magnets > 1 ? 's' : ''}`, r.glue && 'collage'].filter(Boolean);
     $('aInfo').hidden = false; $('aInfo').className = 'notice' + (r.textless || !found.length ? ' warn' : '');
     $('aInfo').innerHTML = `📄 <b>${esc(a.notice)}</b>${n.pages ? ` (${n.pages} page${n.pages > 1 ? 's' : ''})` : ''} : ${found.length ? found.join(', ') : 'rien de reconnu'}.`
-      + (r.textless ? '<br>Notice sans texte lisible (images) : 1 étape comptée par page ou photo. Corrige les chiffres si besoin.' : '<br>Vérifie les chiffres ci-dessous et corrige si besoin.');
+      + (n.ocr ? `<br>${n.ocr} image${n.ocr > 1 ? 's' : ''} lue${n.ocr > 1 ? 's' : ''} par reconnaissance de texte.` : '')
+      + (r.textless ? '<br>Pas de texte lisible (dessins uniquement) : 1 étape comptée par page ou photo. Corrige les chiffres si besoin.' : '<br>Vérifie les chiffres ci-dessous et corrige si besoin.');
     fillAsmInputs(); updateResult();
   } catch (e) {
     console.error(e);
-    $('aInfo').className = 'notice warn'; $('aInfo').textContent = 'Impossible de lire cette notice (le lecteur PDF a besoin d’une connexion internet). Remplis les chiffres à la main.';
+    $('aInfo').className = 'notice warn'; $('aInfo').textContent = 'Impossible de lire cette notice (la lecture a besoin d’une connexion internet). Remplis les chiffres à la main.';
   }
 }
 $('aFile').onchange = e => { importNotice([...e.target.files]); e.target.value = ''; };
