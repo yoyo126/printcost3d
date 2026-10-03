@@ -645,8 +645,9 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   </div>
   <div class="grid2">
     <label>Matière<select name="material" required></select></label>
-    <label>Marque<input name="brand" placeholder="Bambu Lab"></label>
-    <label>Nom de la couleur<input name="colorName" placeholder="Blanc"></label>
+    <label>Marque<select name="brand"></select></label>
+    <label>Référence<input name="ref" placeholder="ex. 10100" autocomplete="off" spellcheck="false"><small id="refHint">Code de l'étiquette : la fiche se remplit toute seule.</small></label>
+    <label class="full">Nom de la couleur<input name="colorName" placeholder="Blanc"></label>
     <label>Couleur<input name="color" type="color" value="#ffffff"></label>
     <label>Prix payé (€)<input name="price" type="number" min="0" step="any" required inputmode="decimal"></label>
     <label>Poids net neuf (g)<input name="weight" type="number" min="1" step="any" required inputmode="numeric"></label>
@@ -1898,7 +1899,7 @@ function renderSpools() {
     return `<div class="item" data-spool="${s.id}" style="cursor:pointer">
       ${spoolSvg(s.color, ratio)}
       <div><h4>${esc(s.material)}${s.colorName ? ' · ' + esc(s.colorName) : ''}</h4>
-        <div class="meta">${esc(s.brand || 'Marque ?')} · ${eur(s.price)} les ${gr(s.weight)}<br>${eur(spoolPerKg(s))}/kg${s.date ? ' · acheté le ' + fmtDate(s.date) : ''}</div>
+        <div class="meta">${esc(s.brand || 'Marque ?')}${s.ref ? ' · réf. ' + esc(s.ref) : ''} · ${eur(s.price)} les ${gr(s.weight)}<br>${eur(spoolPerKg(s))}/kg${s.date ? ' · acheté le ' + fmtDate(s.date) : ''}</div>
         ${s.amsWhere ? `<div style="margin-top:4px"><span class="pill brand">📍 ${esc(s.amsWhere)}</span>${s.amsUuid ? ' <span class="meta">restant lu sur l’imprimante</span>' : ''}</div>` : ''}
         <div class="priceTag"><b class="${isLow ? 'neg' : ''}">${gr(s.remaining)}</b><span class="meta">restants</span> ${s.remaining <= 0 ? '<span class="pill">vide</span>' : isLow ? '<span class="pill bad">bientôt vide</span>' : ''}</div>
         <div class="bar ${isLow ? 'low' : ''}"><i style="width:${ratio * 100}%"></i></div>
@@ -1913,7 +1914,9 @@ function openSpool(s) {
   $('spoolTitle').textContent = s ? 'Modifier la bobine' : 'Nouvelle bobine 🧵'; $('delSpool').hidden = !s;
   const d = s || {material:'PLA Basic', brand:'Bambu Lab', colorName:'', color:'#ffffff', price:'', weight:1000, remaining:1000, date: today()};
   f.material.innerHTML = matOptions(d.material);
-  ['brand', 'colorName', 'color', 'price', 'weight', 'remaining', 'date'].forEach(k => f[k].value = d[k] ?? '');
+  setBrandOptions(d.brand);
+  if (!cat.brands) fetch('catalogue/marques.json').then(r => r.json()).then(j => { cat.brands = j; setBrandOptions(f.brand.value); }).catch(() => {});
+  ['colorName', 'color', 'price', 'weight', 'remaining', 'date', 'ref'].forEach(k => f[k].value = d[k] ?? '');
   f.count.value = 1; $('spoolCountWrap').hidden = !!s;
   $('catPick').hidden = !!s;
   $('dlgSpool').showModal();
@@ -1930,7 +1933,7 @@ $('delSpool').onclick = () => {
 $('fSpool').addEventListener('submit', e => {
   if (e.submitter?.value !== 'save') return;
   const f = $('fSpool');
-  const data = {material: f.material.value.trim() || 'PLA', brand: f.brand.value.trim(), colorName: f.colorName.value.trim(), color: f.color.value,
+  const data = {material: f.material.value.trim() || 'PLA', brand: f.brand.value.trim(), ref: f.ref.value.trim(), colorName: f.colorName.value.trim(), color: f.color.value,
     price: num(f.price.value), weight: Math.max(1, num(f.weight.value)), remaining: num(f.remaining.value), date: f.date.value};
   const n = editingSpool ? 1 : Math.min(50, Math.max(1, parseInt(f.count.value) || 1));
   if (editingSpool) Object.assign(editingSpool, data); else for (let i = 0; i < n; i++) state.spools.push({id: uid(), ...data});
@@ -1943,7 +1946,7 @@ async function catLoad(brand) {
   if (cat.data[brand]) return cat.data[brand];
   if (brand === 'Bambu Lab') {
     const j = await (await fetch('catalogue/bambu.json')).json();
-    return cat.data[brand] = j.colors.map(([material, name, hexes, filaId, code]) => ({material, name, hexes: hexes.split(','), weight: 1000, filaId, code}));
+    return cat.data[brand] = j.colors.map(([material, name, hexes, filaId, code, ref]) => ({material, name, hexes: hexes.split(','), weight: 1000, filaId, code, ref: ref || ''}));
   }
   const b = cat.brands.find(x => x.brand === brand);
   const rows = await (await fetch(`catalogue/m/${b.slug}.json`)).json();
@@ -1970,8 +1973,8 @@ async function catBrandChanged() {
 const swatchBg = hexes => hexes.length > 1 ? `linear-gradient(135deg,${hexes.map(h => '#' + h).join(',')})` : '#' + (hexes[0] || '999999');
 function renderCatColors() {
   const list = cat.data[$('cBrand').value] || [], q = $('cSearch').value.trim().toLowerCase();
-  const shown = list.map((c, i) => [c, i]).filter(([c]) => q ? (c.name + ' ' + c.material).toLowerCase().includes(q) : c.material === $('cMat').value);
-  $('cColors').innerHTML = shown.map(([c, i]) => `<button type="button" class="cBtn" data-ci="${i}" title="${esc(c.material + ' · ' + c.name)}"><span class="sw" style="background:${swatchBg(c.hexes)}"></span><span>${esc(c.name || '(sans nom)')}${q ? `<br><span class="muted">${esc(c.material)}</span>` : ''}</span></button>`).join('')
+  const shown = list.map((c, i) => [c, i]).filter(([c]) => q ? (c.name + ' ' + c.material + ' ' + (c.ref || '')).toLowerCase().includes(q) : c.material === $('cMat').value);
+  $('cColors').innerHTML = shown.map(([c, i]) => `<button type="button" class="cBtn" data-ci="${i}" title="${esc(c.material + ' · ' + c.name)}"><span class="sw" style="background:${swatchBg(c.hexes)}"></span><span>${esc(c.name || '(sans nom)')}${q ? `<br><span class="muted">${esc(c.material)}</span>` : ''}${c.ref ? `<br><span class="muted">réf. ${esc(c.ref)}</span>` : ''}</span></button>`).join('')
     || '<p class="hint">Aucune couleur trouvée.</p>';
 }
 $('cBrand').addEventListener('change', catBrandChanged);
@@ -1982,19 +1985,46 @@ $('cColors').addEventListener('click', e => {
   const brand = $('cBrand').value, c = cat.data[brand][+b.dataset.ci], f = $('fSpool');
   $('cColors').querySelectorAll('.on').forEach(x => x.classList.remove('on')); b.classList.add('on');
   f.material.innerHTML = matOptions(c.material);
-  f.brand.value = brand; f.colorName.value = c.name; f.color.value = '#' + (c.hexes[0] || '999999').toLowerCase();
+  fillSpoolFromCatalog(brand, c);
+});
+function fillSpoolFromCatalog(brand, c) {
+  const f = $('fSpool');
+  f.material.innerHTML = matOptions(c.material);
+  setBrandOptions(brand); f.ref.value = c.ref || ''; f.colorName.value = c.name; f.color.value = '#' + (c.hexes[0] || '999999').toLowerCase();
+  $('refHint').textContent = c.ref ? `✓ ${brand} ${c.material} ${c.name}` : 'Code de l’étiquette : la fiche se remplit toute seule.';
   f.weight.value = c.weight || 1000; f.remaining.value = c.weight || 1000;
   // prix : celui de ta dernière bobine identique (marque + matière), sinon le prix par défaut au kilo
   const last = [...state.spools].reverse().find(s => s.brand === brand && baseMat(s.material) === baseMat(c.material) && s.price > 0);
   f.price.value = last ? (spoolPerKg(last) * (c.weight || 1000) / 1000).toFixed(2) : (state.settings.defaultFilamentPrice * (c.weight || 1000) / 1000).toFixed(2);
   f.price.focus();
-});
-// Nom français d'une bobine Bambu de l'AMS (identifiant filament + code couleur lus sur la puce)
-function bambuColorName(t) {
-  const list = cat.data['Bambu Lab']; if (!list || !t.filaId || !t.code) return '';
-  const code = String(t.code).split('-').pop();
-  return list.find(c => c.filaId === t.filaId && c.code === code)?.name || '';
 }
+// Bobine Bambu de l'AMS → entrée du catalogue (identifiant filament + code couleur lus sur la puce)
+function bambuCatEntry(t) {
+  const list = cat.data['Bambu Lab']; if (!list || !t.filaId || !t.code) return null;
+  const code = String(t.code).split('-').pop();
+  return list.find(c => c.filaId === t.filaId && c.code === code) || null;
+}
+const bambuColorName = t => bambuCatEntry(t)?.name || '';
+// Liste des marques (Bambu Lab en premier) ; « Autre… » permet d'en saisir une
+function setBrandOptions(cur) {
+  const sel = $('fSpool').brand, names = ['Bambu Lab', ...(cat.brands || []).map(b => b.brand)];
+  if (cur && !names.includes(cur)) names.splice(1, 0, cur);
+  sel.innerHTML = names.map(b => `<option${b === cur ? ' selected' : ''}>${esc(b)}</option>`).join('') + '<option value="__autre">Autre marque…</option>';
+  if (!cur) sel.value = 'Bambu Lab';
+}
+$('fSpool').brand.addEventListener('change', e => {
+  if (e.target.value !== '__autre') return;
+  const b = (prompt('Nom de la marque :') || '').trim();
+  setBrandOptions(b || 'Bambu Lab');
+});
+// Référence tapée à la main : on retrouve la couleur dans le catalogue de la marque choisie
+$('fSpool').ref.addEventListener('input', async e => {
+  const ref = e.target.value.trim(); if (ref.length < 4) return;
+  const brand = $('fSpool').brand.value;
+  const list = await catLoad(brand === '__autre' ? 'Bambu Lab' : brand).catch(() => null);
+  const c = list?.find(x => x.ref && x.ref === ref);
+  if (c) { fillSpoolFromCatalog(brand, c); toast(`✓ ${c.material} ${c.name}`); }
+});
 
 /* ---------- Bilan ---------- */
 /* ---------- Production : tout ce que les imprimantes ont imprimé (historique Bambu) ---------- */
@@ -2425,7 +2455,7 @@ function spoolForTray(t, devId) {
 }
 function spoolFromTray({t, dev, where}) {
   const weight = t.weight || 1000;
-  return {id: uid(), material: t.brand || t.type || 'PLA', brand: t.rfid ? 'Bambu Lab' : '', colorName: bambuColorName(t), color: t.color || '#999999',
+  return {id: uid(), material: t.brand || t.type || 'PLA', brand: t.rfid ? 'Bambu Lab' : '', ref: bambuCatEntry(t)?.ref || '', colorName: bambuColorName(t), color: t.color || '#999999',
     price: Math.round(state.settings.defaultFilamentPrice * weight / 10) / 100, weight, remaining: t.grams ?? weight, date: today(),
     amsUuid: t.uuid || '', amsLoc: trayKey(t, dev), amsWhere: where};
 }
@@ -2439,6 +2469,7 @@ function syncAmsToSpools() {
     seen.add(sp.id);
     const upd = {amsWhere: x.where, amsLoc: trayKey(x.t, x.dev)};
     if (!sp.colorName && bambuColorName(x.t)) upd.colorName = bambuColorName(x.t);
+    if (!sp.ref && bambuCatEntry(x.t)?.ref) upd.ref = bambuCatEntry(x.t).ref;
     if (x.t.rfid && x.t.grams != null) upd.remaining = x.t.grams;
     for (const [k, v] of Object.entries(upd)) if (sp[k] !== v) { sp[k] = v; changed = true; }
   }

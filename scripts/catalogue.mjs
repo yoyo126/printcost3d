@@ -17,9 +17,9 @@ const hex = h => String(h || '').replace('#', '').slice(0, 6).toUpperCase();
 
 fs.mkdirSync(path.join(OUT, 'm'), {recursive: true});
 
-// Bambu Lab : [matière, nom FR, teintes séparées par des virgules, identifiant filament, code couleur]
+// Bambu Lab : [matière, nom FR, teintes séparées par des virgules, identifiant filament, code couleur, référence (code de l'étiquette)]
 const bambu = (await (await fetch(BAMBU)).json()).data;
-const colors = bambu.map(c => [c.fila_type, (c.fila_color_name?.fr || c.fila_color_name?.en || '').trim(), (c.fila_color || []).map(hex).join(','), c.fila_id, c.color_code]);
+const colors = bambu.map(c => [c.fila_type, (c.fila_color_name?.fr || c.fila_color_name?.en || '').trim(), (c.fila_color || []).map(hex).join(','), c.fila_id, c.color_code, c.fila_color_code || '']);
 fs.writeFileSync(path.join(OUT, 'bambu.json'), JSON.stringify({source: 'Bambu Studio', colors}));
 
 // Autres marques : un fichier par marque [matière, nom, teintes, poids net g, poids bobine vide g]
