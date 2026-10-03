@@ -258,15 +258,22 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .pill.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 .pill.brand{background:var(--brand-soft);color:var(--brand-ink);border-color:transparent}
 .spool{width:76px;height:76px}
-.spoolGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
-.grp{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;display:grid;grid-template-columns:56px 1fr;gap:14px;align-items:start;cursor:pointer;min-width:0}
+.spoolGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.grp{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:0;display:grid;grid-template-columns:104px 1fr;align-items:stretch;cursor:pointer;min-width:0;overflow:hidden}
+.gColor{padding:8px 9px;display:flex;flex-direction:column;justify-content:center;gap:2px;line-height:1.2;box-shadow:inset -1px 0 0 #0000001a;min-width:0}
+.gColor b{font-size:14px;font-weight:800;overflow-wrap:anywhere}
+.gColor span{font-size:12.5px;font-weight:600;opacity:.9}
+.gInfo{padding:8px 11px;min-width:0}
+.grp .subList{grid-column:1/-1;padding:0 10px 10px;margin-top:0}
 .grp:hover{border-color:var(--brand)}
 .grp.open{grid-column:1/-1;border-color:var(--brand)}
-.grp .spool{width:56px;height:56px}
-.grp h4{margin:0 0 3px;font-size:17px;line-height:1.25;font-family:var(--display);font-weight:700;overflow-wrap:anywhere}
-.grp .meta{font-size:14px;color:var(--muted);line-height:1.5}
-.grp .kg{font-family:var(--display);font-weight:800;font-size:22px;margin:5px 0 2px}
-.grp .pill{font-size:12.5px;padding:2px 9px}
+.grp .gBar{height:4px;border-radius:2px;background:var(--line);overflow:hidden;margin-top:5px}
+.grp .gBar i{display:block;height:100%;background:var(--ok)}
+.grp .gBar.low i{background:var(--bad)}
+.grp h4{margin:0 0 1px;font-size:15.5px;line-height:1.25;font-family:var(--display);font-weight:700;overflow-wrap:anywhere}
+.grp .meta{font-size:12.5px;color:var(--muted);line-height:1.4}
+.grp .kg{font-family:var(--display);font-weight:800;font-size:19px;margin:2px 0 0}
+.grp .pill{font-size:11.5px;padding:1px 8px}
 .subList{margin-top:10px;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
 .sub{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14.5px}
 .sub:hover{border-color:var(--brand)}
@@ -414,12 +421,8 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   dialog form{padding:18px 16px}
   dialog{width:calc(100vw - 20px)}
   .items{grid-template-columns:1fr}
-  .spoolGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .grp{grid-template-columns:34px 1fr;gap:9px;padding:11px}
-  .grp .spool{width:34px;height:34px}
-  .grp h4{font-size:15px}
-  .grp .meta{font-size:12.5px}
-  .grp .kg{font-size:19px}
+  .spoolGrid{grid-template-columns:1fr;gap:6px}
+  .grp{grid-template-columns:92px 1fr}
   .estGrid{grid-template-columns:110px 1fr}
   #preview{width:110px;height:110px}
   .drop{padding:16px}
@@ -774,6 +777,19 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   <div id="bStep2" hidden><label>Code reçu<input name="code" inputmode="numeric" autocomplete="one-time-code"></label><p class="hint" id="bCodeHint"></p></div>
   <p id="bErr" class="neg" style="font-weight:650;min-height:1.2em"></p>
   <div class="dFoot"><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Continuer</button></div>
+</form></dialog>
+
+<!-- Impression passée → stock d'un modèle du catalogue -->
+<dialog id="dlgTStock"><form method="dialog" id="fTStock">
+  <div class="dHead"><h2>Ajouter au stock</h2><button class="iconBtn" value="cancel" formnovalidate aria-label="Fermer">✕</button></div>
+  <p id="tsName" style="margin-top:0;font-weight:700"></p>
+  <div class="grid2">
+    <label class="full">Modèle du catalogue<select id="tsModel"></select></label>
+    <label>Pièces à ajouter<input id="tsQty" type="number" min="1" step="1" inputmode="numeric"></label>
+  </div>
+  <label class="check" style="margin-top:12px"><input type="checkbox" id="tsLink"> Les prochaines impressions de ce fichier vont toutes seules dans ce stock</label>
+  <p class="hint" id="tsEmpty" hidden>Ton catalogue est vide : utilise d'abord « Ajouter au catalogue » sur cette impression.</p>
+  <div class="dFoot"><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Ajouter</button></div>
 </form></dialog>
 
 <!-- Relier un emplacement sans puce à une bobine du stock -->
@@ -1977,6 +1993,12 @@ $('salesTable').addEventListener('click', e => { const tr = e.target.closest('[d
 /* ---------- Filaments ---------- */
 let editingSpool = null;
 // Stock regroupé par référence (marque + référence, sinon marque + matière + couleur) : total en kg, bobines en machine / en réserve
+// texte noir ou blanc selon la couleur du filament (lisibilité)
+function inkOn(hex) {
+  const m = /^#?([0-9a-f]{6})/i.exec(hex || ''); if (!m) return '#1b1830';
+  const v = parseInt(m[1], 16), [r, g, b] = [v >> 16, v >> 8 & 255, v & 255].map(c => { c /= 255; return c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; });
+  return .2126 * r + .7152 * g + .0722 * b > .4 ? '#1b1830' : '#ffffff';
+}
 const kgTxt = g => `${(g / 1000).toLocaleString('fr-FR', {maximumFractionDigits: 2})} kg`;
 const spoolKey = s => (s.brand || '').toLowerCase().replace(/\s+/g, '') + '|' + (s.ref ? 'ref:' + s.ref : `${baseMat(s.material)}|${(s.colorName || s.color || '').toLowerCase()}`);
 let openGroups = new Set();
@@ -2002,15 +2024,17 @@ function renderSpools() {
   $('spoolList').innerHTML = sorted.map(([k, sps]) => {
     const s = sps[0], total = sps.reduce((a, x) => a + Math.max(0, x.remaining), 0), cap = sps.reduce((a, x) => a + x.weight, 0);
     const inMachine = sps.filter(x => x.amsWhere), reserve = sps.length - inMachine.length, isLow = total < low, open = openGroups.has(k);
+    const ink = inkOn(s.color);
     return `<div class="grp${open ? ' open' : ''}" data-grp="${esc(k)}">
-      ${spoolSvg(s.color, cap ? total / cap : 0)}
-      <div style="min-width:0"><h4>${esc(s.colorName || s.material)}</h4>
-        <div class="meta"><b style="color:var(--ink)">${esc(s.material)}</b> · ${esc(s.brand || 'Marque ?')}</div>
-        <div class="meta">${s.ref ? `Réf. <b style="color:var(--ink)">${esc(s.ref)}</b> · ` : ''}${eur(spoolPerKg(s))}/kg</div>
-        <div class="kg ${isLow ? 'neg' : ''}">${total >= 1000 ? kgTxt(total) : gr(total)}</div>
-        <div class="meta">${sps.length > 1 ? `<span class="pill brand">${sps.length} bobines</span> ` : ''}${inMachine.map(x => { const [pr, sl] = x.amsWhere.split(' · '); return `📍${esc(pr.split(' ').pop())} ${esc(sl || '')}`; }).join(' ')}${reserve ? ` 📦${reserve > 1 ? reserve : ''}` : ''}${total <= 0 ? ' <span class="pill">vide</span>' : isLow ? ' <span class="pill bad">bientôt vide</span>' : ''}</div>
-        ${open && sps.length > 1 ? `<div class="subList">${sps.map(x => spoolRow(x, low)).join('')}</div>` : ''}
-      </div></div>`;
+      <div class="gColor" style="background:${esc(s.color)};color:${ink}"><b>${esc(s.material)}</b>${s.ref ? `<span>Réf. ${esc(s.ref)}</span>` : ''}</div>
+      <div class="gInfo"><h4>${esc(s.colorName || s.material)}</h4>
+        <div class="meta">${esc(s.brand || 'Marque ?')} · ${eur(spoolPerKg(s))}/kg</div>
+        <div class="kg ${isLow ? 'neg' : ''}">${total >= 1000 ? kgTxt(total) : gr(total)} <span class="meta" style="font-family:inherit;font-weight:500">${sps.length > 1 ? `· ${sps.length} bobines` : ''}</span></div>
+        <div class="meta">${inMachine.map(x => { const [pr, sl] = x.amsWhere.split(' · '); return `📍${esc(pr.split(' ').pop())} ${esc(sl || '')}`; }).join(' ')}${reserve ? ` 📦${reserve > 1 ? ' ' + reserve + ' en réserve' : ' en réserve'}` : ''}${total <= 0 ? ' · vide' : isLow ? ' · <b class="neg">bientôt vide</b>' : ''}</div>
+        <div class="gBar ${isLow ? 'low' : ''}"><i style="width:${cap ? Math.min(100, total / cap * 100) : 0}%"></i></div>
+      </div>
+      ${open && sps.length > 1 ? `<div class="subList">${sps.map(x => spoolRow(x, low)).join('')}</div>` : ''}
+    </div>`;
   }).join('') || (q ? emptyState('🔍', 'Aucune bobine trouvée', 'Essaie une autre couleur ou référence.') : emptyState('🧵', 'Aucune bobine', 'Ajoute tes bobines : le coût utilisera ton vrai prix d’achat et le stock se mettra à jour à chaque impression.'));
 }
 $('showEmpty').onchange = renderSpools;
@@ -2150,7 +2174,9 @@ function fillSpoolFromCatalog(brand, c) {
 // Bobines sans puce reliées à un emplacement : restant = quantité de départ − grammes pris à cet emplacement depuis la mise en place
 const dayStart = iso => { const d = new Date(iso); d.setHours(0, 0, 0, 0); return d.getTime(); };
 function trackChipless() {
-  const tasks = new Map([...(hist?.tasks || []), ...(bambu?.tasks || [])].map(t => [t.id, t]));
+  // l'historique complet (gardé en base) est indispensable : sans lui, on ne touche à rien
+  if (!hist?.tasks) return false;
+  const tasks = new Map([...hist.tasks, ...(bambu?.tasks || [])].map(t => [t.id, t]));
   let changed = false;
   for (const sp of state.spools) {
     if (sp.amsUuid || !sp.amsLoc || !sp.trackFrom) continue;
@@ -2563,6 +2589,7 @@ async function loadBambu(force = false) {
   } catch { bambu = {connected: false, error: 'Serveur injoignable.'}; }
   bambuLoading = false; bambuAt = Date.now();
   await catLoad('Bambu Lab').catch(() => {});
+  if (!hist && bambu?.connected) await loadHistory().catch(() => {});
   syncAmsToSpools(); if (trackChipless() && !$('secStock').hidden) renderSpools();
   autoStockFromTasks(); renderBambu(); renderAlert();
 }
@@ -2623,16 +2650,16 @@ const taskCard = t => `<div class="task${selTasks.has(t.id) ? ' sel' : ''}">
     ${t.weight > 0 && t.status !== 1 ? `<label class="tChk" title="Sélectionner"><input type="checkbox" data-sel="${esc(t.id)}"${selTasks.has(t.id) ? ' checked' : ''}></label>` : ''}
     ${taskImg(t)}<div style="min-width:0">
     <div class="tTitle">${esc((t.title || 'Impression').replace(/_/g, ' ').replace(/\s+/g, ' ').trim())}</div>
-    ${state.taskSold?.[t.id] || state.taskDone?.[t.id] === 'stock' ? `<div style="margin-top:3px">${state.taskDone?.[t.id] === 'stock' ? '<span class="pill ok">📦 en stock</span> ' : ''}${state.taskSold?.[t.id] ? '<span class="pill brand">💸 vendue</span>' : ''}</div>` : ''}
+    ${state.taskSold?.[t.id] || state.taskDone?.[t.id] === 'stock' ? `<div class="hint" style="margin:3px 0 0">${[state.taskDone?.[t.id] === 'stock' ? '✓ ajoutée au stock' : '', state.taskSold?.[t.id] ? '✓ vendue' : ''].filter(Boolean).join(' · ')}</div>` : ''}
     <div class="hint" style="margin:2px 0 0">${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) + ' · ' : ''}${esc(t.deviceName || devNameOf(t.device))}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''} · <b>${gr(t.weight)}</b> · ${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</div>
     <div class="trays" style="margin-top:6px">${(t.ams || []).map(m => `<span class="tray"><span class="dot" style="background:${esc(m.color || '#999')}"></span>${esc(m.letter || m.type)} · ${gr(m.weight)}</span>`).join('')}</div>
-    ${t.weight > 0 ? `<div class="tActs"><button class="btn small" data-tsell="${esc(t.id)}">💸 Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">🧮 Calculer</button></div>` : ''}
+    ${t.weight > 0 ? `<div class="tActs"><button class="btn small" data-tsell="${esc(t.id)}">Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">Calculer</button>${t.status === 2 ? `<button class="btn small" data-tstock="${esc(t.id)}">Ajouter au stock</button>` : ''}${suggestModel(t)?.sure ? '' : `<button class="btn small" data-tcat="${esc(t.id)}">Ajouter au catalogue</button>`}</div>` : ''}
   </div></div>`;
 function renderHist() {
   const box = $('histCard'), list = hist?.tasks || bambu?.tasks || [];
   const head = `<div class="cardHead"><span class="badgeIcon">🕘</span><h2>Dernières impressions</h2><button class="link" id="hRefresh" style="margin-left:auto" aria-label="Actualiser">↻<span class="hideSm"> Actualiser</span></button></div>`;
   if (!hist && !bambu) { box.innerHTML = head + '<p class="hint" style="margin:0">⏳ Chargement…</p>'; return; }
-  box.innerHTML = head + renderToSort() + (list.length
+  box.innerHTML = head + (list.length
     ? list.slice(0, histShown).map(taskCard).join('') + (list.length > histShown ? `<button class="btn block" id="hMore" style="margin-top:12px;width:100%">Voir plus (${list.length - histShown} de plus)</button>` : '')
     : '<div class="empty"><span class="big">🕘</span>Aucune impression enregistrée pour l’instant.</div>')
     + '<p class="hint">Historique gardé dans ton compte. Pour remonter plus loin : Bilan › Production › « Récupérer tout l’historique ».</p>';
@@ -2645,6 +2672,19 @@ $('histCard').addEventListener('change', e => {
 $('histCard').addEventListener('click', async e => {
   if (e.target.closest('#hMore')) { histShown += 20; renderHist(); return; }
   if (e.target.closest('[data-tsall]')) { toSortAll = !toSortAll; renderHist(); return; }
+  const ts2 = e.target.closest('[data-tstock],[data-tcat]');
+  if (ts2) {
+    const t = allTasks().find(x => x.id === (ts2.dataset.tstock || ts2.dataset.tcat)); if (!t) return;
+    if (ts2.dataset.tcat) {
+      const sg = suggestModel(t); if (sg?.sure) { toast('Ce fichier est déjà au catalogue'); return; }
+      const j = taskToJob(t), m = {...JSON.parse(JSON.stringify(j)), id: uid(), stock: 0, created: today()};
+      m.filaments = m.filaments.filter(l => num(l.grams) > 0).map(l => ({...l, pricePerKg: linePerKg(l)}));
+      state.models.unshift(m); (state.taskLinks ||= {})[normTitle(t.title)] = m.id;
+      save(); renderHist(); toast(`✨ « ${m.name} » ajouté au catalogue (prix et réglages modifiables dans Catalogue)`);
+      return;
+    }
+    openTaskStock(t); return;
+  }
   const st = e.target.closest('[data-stock],[data-skip]');
   if (st) {
     const row = st.closest('.tsRow'), t = allTasks().find(x => x.id === (st.dataset.stock || st.dataset.skip)); if (!t) return;
@@ -2677,16 +2717,16 @@ function suggestModel(t) {
   }
   return score >= .5 ? {id: best, sure: false} : null;
 }
-function addTaskToStock(t, modelId) {
+function addTaskToStock(t, modelId, qty = null) {
   const m = state.models.find(x => x.id === modelId); if (!m) return;
   const day = new Date(t.end || t.start).toLocaleDateString('sv');
   // impression déjà notée à la main ce jour-là pour ce modèle : on la relie au lieu de la compter deux fois
   const manual = state.prints.find(p => p.modelId === m.id && !p.taskId && !p.failed && p.date === day);
   if (manual) manual.taskId = t.id;
   else {
-    const c = computeCost(m);
-    m.stock = (m.stock || 0) + c.pcs;
-    state.prints.unshift({id: uid(), date: day, modelId: m.id, name: m.name, plates: 1, pieces: c.pcs, failed: false, grams: t.weight, cost: c.total, usage: [], source: 'bambu', taskId: t.id});
+    const c = computeCost(m), pcs = qty ?? c.pcs;
+    m.stock = (m.stock || 0) + pcs;
+    state.prints.unshift({id: uid(), date: day, modelId: m.id, name: m.name, plates: 1, pieces: pcs, failed: false, grams: t.weight, cost: c.total, usage: [], source: 'bambu', taskId: t.id});
   }
   (state.taskDone ||= {})[t.id] = 'stock';
 }
@@ -2717,6 +2757,28 @@ function renderToSort() {
         : `<div class="tsActs"><button class="btn small" data-tcalc="${esc(t.id)}">🧮 Créer le modèle</button><button class="btn small" data-skip="${esc(t.id)}">Pas pour le stock</button></div>`}
     </div></div>`; }).join('')}${list.length > 3 ? `<button class="link" data-tsall>${toSortAll ? 'Réduire' : `Voir les ${Math.min(list.length, 30) - 3} autres`}</button>` : ''}</div>`;
 }
+
+let tsTask = null;
+function openTaskStock(t) {
+  tsTask = t; const sg = suggestModel(t);
+  $('tsName').textContent = (t.title || 'Impression').replace(/_/g, ' ').trim();
+  $('tsModel').innerHTML = '<option value="">Choisir…</option>' + state.models.map(m => `<option value="${esc(m.id)}"${m.id === sg?.id ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
+  $('tsEmpty').hidden = state.models.length > 0;
+  const m = state.models.find(x => x.id === $('tsModel').value);
+  $('tsQty').value = m ? computeCost(m).pcs : 1; $('tsLink').checked = !!sg?.sure;
+  $('dlgTStock').showModal();
+}
+$('tsModel').addEventListener('change', () => { const m = state.models.find(x => x.id === $('tsModel').value); if (m) $('tsQty').value = computeCost(m).pcs; });
+$('fTStock').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'save' || !tsTask) return;
+  const id = $('tsModel').value;
+  if (!id) { e.preventDefault(); toast('Choisis le modèle du catalogue'); return; }
+  const key = normTitle(tsTask.title);
+  if ($('tsLink').checked) (state.taskLinks ||= {})[key] = id; else if (state.taskLinks?.[key] === id) delete state.taskLinks[key];
+  const qty = Math.max(1, parseInt($('tsQty').value) || 1);
+  addTaskToStock(tsTask, id, qty); save(); renderHist();
+  toast(`📦 +${qty} « ${state.models.find(m => m.id === id)?.name} » en stock`);
+});
 
 /* Sélection de plusieurs impressions → ventes groupées (Whatnot, Etsy…) */
 const selTasks = new Set();
@@ -2864,14 +2926,24 @@ function syncAmsToSpools() {
   if (!bambu?.devices) return;
   let changed = false;
   const seen = new Set();
-  // bobine Bambu à puce pas encore reliée : on reprend celle saisie à la main (même référence, en réserve), entamée d'abord
+  // Bobine Bambu à puce posée dans l'AMS et absente du stock (restant connu) :
+  //  - une bobine de la réserve, même référence, avec à peu près le même restant (neuve qu'on vient d'ouvrir) → elle passe de la réserve à la machine ;
+  //  - sinon (bobine entamée) → elle est ajoutée en bobine de plus de cette référence.
+  const msgs = [];
   for (const x of allTrays()) {
-    if (!x.t.rfid || x.t.empty || spoolForTray(x.t, x.dev)) continue;
-    const ref = bambuCatEntry(x.t)?.ref; if (!ref) continue;
-    const cand = state.spools.filter(s => !s.amsUuid && !s.amsWhere && s.ref === ref && /bambu/i.test(s.brand || ''))
-      .sort((a, b) => (a.remaining < a.weight ? 0 : 1) - (b.remaining < b.weight ? 0 : 1) || a.remaining - b.remaining)[0];
-    if (cand) { cand.amsUuid = x.t.uuid; cand.amsLoc = trayKey(x.t, x.dev); changed = true; toast(`🔗 ${cand.material} ${cand.colorName || ''} reliée à l’AMS (${x.where}) : restant lu sur l’imprimante`); }
+    if (!x.t.rfid || x.t.empty || x.t.grams == null || spoolForTray(x.t, x.dev)) continue;
+    const ref = bambuCatEntry(x.t)?.ref, g = x.t.grams;
+    const cand = ref ? state.spools.filter(s => !s.amsUuid && !s.amsWhere && s.ref === ref && /bambu/i.test(s.brand || '') && Math.abs(s.remaining - g) <= Math.max(150, s.weight * .2))
+      .sort((a, b) => Math.abs(a.remaining - g) - Math.abs(b.remaining - g))[0] : null;
+    if (cand) { cand.amsUuid = x.t.uuid; cand.amsLoc = trayKey(x.t, x.dev); msgs.push(`${cand.colorName || cand.material} : de la réserve vers ${x.where}`); }
+    else {
+      const sp = spoolFromTray(x), same = state.spools.find(s => s.ref && s.ref === sp.ref && s.price > 0);
+      if (same) sp.price = Math.round(spoolPerKg(same) * sp.weight / 10) / 100;
+      state.spools.push(sp); msgs.push(`${sp.colorName || sp.material} ajoutée (${x.where}, ${gr(g)})`);
+    }
+    changed = true;
   }
+  if (msgs.length) toast(`🧵 ${msgs.join(' · ')}`);
   for (const x of allTrays()) {
     const sp = spoolForTray(x.t, x.dev); if (!sp) continue;
     seen.add(sp.id);
