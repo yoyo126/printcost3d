@@ -579,7 +579,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <label>Date<input name="date" type="date" required></label>
   </div>
   <div id="salePreview" class="notice"></div>
-  <details class="fold" style="margin-top:6px"><summary><span><b style="font-size:15px">Frais, envoi et coût</b><small>Calculés automatiquement, modifiables.</small></span></summary>
+  <details class="fold" id="saleMore" style="margin-top:6px"><summary><span><b style="font-size:15px">Frais, envoi et coût</b><small>Calculés automatiquement, modifiables.</small></span></summary>
     <div class="grid2">
       <label>Frais plateforme (€)<input name="fees" type="number" min="0" step="any" inputmode="decimal"><small id="feesHint">Calculés selon le canal.</small></label>
       <label>Frais d'envoi à ta charge (€)<input name="shipping" type="number" min="0" step="any" value="0" inputmode="decimal"><small>0 si l'acheteur paie le port.</small></label>
@@ -1541,8 +1541,9 @@ $('fPrint').addEventListener('submit', e => {
 
 /* ---------- Ventes ---------- */
 let editingSale = null, feesTouched = false;
-function openSale(sale, modelId) {
-  editingSale = sale; feesTouched = !!sale;
+let salePrefill = null;
+function openSale(sale, modelId, prefill = null) {
+  editingSale = sale; feesTouched = !!sale; salePrefill = prefill;
   const f = $('fSale');
   f.modelId.innerHTML = state.models.map(m => `<option value="${esc(m.id)}">${esc(m.name)} (${m.stock || 0} en stock)</option>`).join('') + '<option value="">Autre article (hors catalogue)</option>';
   f.channelId.innerHTML = state.channels.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
@@ -1555,13 +1556,16 @@ function openSale(sale, modelId) {
     f.modelId.value = modelId ?? (state.models[0]?.id || '');
     f.date.value = today(); f.qty.value = 1; f.shipping.value = 0; f.note.value = ''; f.name.value = '';
     f.channelId.value = state.lastChannel && state.channels.some(c => c.id === state.lastChannel) ? state.lastChannel : (state.channels[0]?.id || '');
+    if (prefill) { f.modelId.value = ''; f.name.value = prefill.name; f.note.value = prefill.note || ''; }
     fillSaleFromModel();
   }
+  $('saleMore').open = !f.modelId.value;   // hors catalogue : le coût de revient doit rester visible
   updateSalePreview(); $('dlgSale').showModal();
 }
 function fillSaleFromModel() {
   const f = $('fSale'), m = state.models.find(x => x.id === f.modelId.value), ch = state.channels.find(c => c.id === f.channelId.value);
   if (m) { const c = computeCost(m); f.unitCost.value = c.unit.toFixed(2); f.unitPrice.value = (ch ? channelPrice(ch, modelPrice(m, c)) : modelPrice(m, c)).toFixed(2); f.name.value = m.name; }
+  else if (salePrefill) { f.unitCost.value = salePrefill.unitCost.toFixed(2); f.unitPrice.value = (ch ? channelPrice(ch, salePrefill.price) : salePrefill.price).toFixed(2); }
 }
 function updateSalePreview() {
   const f = $('fSale'), ch = state.channels.find(c => c.id === f.channelId.value);
@@ -1576,8 +1580,10 @@ function updateSalePreview() {
 $('fSale').addEventListener('input', e => {
   if (e.target.name === 'fees') feesTouched = true;
   if (e.target.name === 'modelId' || e.target.name === 'channelId') { if (!editingSale) fillSaleFromModel(); feesTouched = !!editingSale && feesTouched; }
+  if (e.target.name === 'modelId' && !f_modelId()) $('saleMore').open = true;
   updateSalePreview();
 });
+const f_modelId = () => $('fSale').modelId.value;
 $('newSale').onclick = () => openSale(null);
 $('delSale').onclick = () => {
   if (!editingSale || !confirm('Supprimer cette vente ? Les pièces reviennent en stock.')) return;
@@ -1989,10 +1995,11 @@ function renderBambu() {
   }).join('') || '<p class="hint">Aucune imprimante trouvée sur ce compte.</p>';
   const unlinked = allTrays().filter(({t, dev}) => !t.empty && !spoolForTray(t, dev)).length;
   const devName = id => bambu.devices.find(d => d.id === id)?.name || '';
-  const tasks = (bambu.tasks || []).slice(0, 8).map(t => `<tr><td>${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) : ''}</td>
+  const tasks = (bambu.tasks || []).slice(0, 12).map(t => `<tr><td>${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) : ''}</td>
     <td>${esc(t.title)}<div class="hint" style="margin:0">${esc(t.deviceName || devName(t.device))}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''}</div>
       <div class="trays" style="margin-top:4px">${t.ams.map(m => `<span class="tray"><span class="dot" style="background:${esc(m.color || '#999')}"></span>${esc(m.letter || m.type)} · ${gr(m.weight)}</span>`).join('')}</div></td>
-    <td class="n">${gr(t.weight)}</td><td class="n">${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</td></tr>`).join('');
+    <td class="n">${gr(t.weight)}<div class="hint" style="margin:0">${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</div>
+      ${t.weight > 0 ? `<div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button class="btn small" data-tsell="${esc(t.id)}">💸 Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">🧮 Calculer</button></div>` : ''}</td></tr>`).join('');
   box.innerHTML = head + `<p class="hint" style="margin-top:0">Compte ${esc(bambu.account || '')} · <button class="link" id="bLogout">Déconnecter</button></p>
     ${unlinked ? `<div class="notice" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🧵 ${unlinked} bobine${unlinked > 1 ? 's' : ''} de l’AMS pas encore dans ton stock. <button class="btn small primary" id="bAddAll">Tout ajouter au stock</button></div>` : ''}
     ${devs}
@@ -2039,7 +2046,35 @@ function syncAmsToSpools() {
   }
   if (changed) { save(); if (document.querySelector('.panel.active')?.id === 'spools') renderSpools(); }
 }
+// Une impression de l'historique Bambu → calcul de coût (grammes réels par emplacement, temps réel)
+const spoolAt = (dev, index) => state.spools.find(s => s.amsLoc === `${dev}:${index}`);
+function taskToJob(t) {
+  const d = bambu?.devices?.find(x => x.id === t.device), j = newJob();
+  j.name = (t.title || 'Impression').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  if (state.settings.printerMode === 'file' && d) j.printerId = state.printers.find(p => p.name.toUpperCase().includes(prCode(d.model)))?.id || defaultPrinterId();
+  const mins = Number(t.minutes) || 0; j.hours = Math.floor(mins / 60); j.minutes = mins % 60;
+  j.filaments = t.ams?.length ? t.ams.map(m => {
+    const sp = spoolAt(t.device, m.index);
+    return {spoolId: sp?.id || '', material: sp?.material || m.type || 'PLA', color: sp?.color || m.color || '#999999', grams: m.weight, pricePerKg: sp ? spoolPerKg(sp) : state.settings.defaultFilamentPrice, fromFile: true};
+  }) : [{...blankFil(), grams: t.weight}];
+  return j;
+}
 $('bambuCard').addEventListener('click', async e => {
+  const ts = e.target.closest('[data-tsell],[data-tcalc]');
+  if (ts) {
+    const t = (bambu?.tasks || []).find(x => x.id === (ts.dataset.tsell || ts.dataset.tcalc)); if (!t) return;
+    const j = taskToJob(t), c = computeCost(j);
+    if (ts.dataset.tsell) {
+      const dn = bambu.devices.find(d => d.id === t.device)?.name || '';
+      openSale(null, '', {name: j.name, unitCost: c.unit, price: c.suggested, note: `Imprimé${t.end ? ' le ' + fmtDate(String(t.end).slice(0, 10)) : ''}${dn ? ' sur ' + dn : ''}`});
+    } else {
+      job = j; loadedPlates = []; est = null; lastObjs = 0; fileCfg = null;
+      $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true;
+      renderCalc(); showTab('calc'); window.scrollTo({top: 0});
+      toast('🧮 Impression chargée : ajuste si besoin, puis « Ajouter au catalogue »');
+    }
+    return;
+  }
   const add = e.target.closest('[data-add]');
   if (add) {
     const [dev, idx] = add.dataset.add.split('|');
