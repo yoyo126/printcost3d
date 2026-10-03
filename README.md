@@ -1,48 +1,61 @@
 # PrintCost 3D
 
-Application web mobile-first pour estimer le coût réel d'une impression 3D et proposer un prix de vente hors expédition.
+Outil de gestion pour vendre ses impressions 3D : coût de revient réel, prix de revente selon le canal, stock de filament, catalogue, ventes et bilan.
 
-## Calcul automatique réel
+Tout tient dans `index.html` : aucun serveur, rien à installer (seule la police d'écriture vient de Google Fonts, avec repli automatique hors ligne). On peut l'ouvrir en double-cliquant dessus ou le servir avec GitHub Pages.
 
-- Import STL et 3MF sans saisie manuelle du poids ou du temps
-- Slicing réel par le moteur officiel Bambu Studio et ses profils installés
-- Lecture directe du G-code embarqué dans les 3MF Bambu déjà tranchés
-- Profils Bambu Lab P2S + 2 AMS et H2D + 2 AMS
-- Coût matière, électricité, amortissement, maintenance et risque d'échec
-- Marge, frais de prise en charge et minimum de facturation configurables
-- Distinction claire entre coût réel estimé et prix de vente conseillé
-- Historique local
-- Réglages persistants dans le navigateur
+## Écrans
 
-GitHub Pages héberge l'interface, mais ne peut pas exécuter un moteur natif. Il faut donc lancer le compagnon local sur l'ordinateur où Bambu Studio est installé :
+- **Calcul.** Tu choisis ou glisses un fichier n'importe où sur la page.
+  - **3MF tranché par Bambu Studio** : le temps, les grammes par couleur AMS, le nombre d'objets et la vignette sont lus directement dans le fichier. Ce sont les chiffres exacts.
+  - **STL ou 3MF non tranché** : estimation à partir du volume du modèle (2 parois + dessus/dessous, remplissage et matière au choix, débit moyen en g/h), avec un aperçu 3D. Le modèle est alors marqué « ≈ estimé » dans le catalogue.
+  - Chaque couleur est associée à la bobine du stock de même matière et de couleur la plus proche.
+  - Le prix reste visible pendant la saisie : à droite sur ordinateur, dans une barre en bas sur téléphone.
+- **Catalogue.** Modèles enregistrés avec leur coût, leur prix et le stock de pièces prêtes.
+  - « Imprimer » déduit le filament des bobines et ajoute les pièces au stock. Une impression ratée déduit le filament sans rien ajouter au stock.
+  - Chaque impression peut être annulée.
+- **Ventes.** Chaque vente enregistre la date, le canal, la quantité, le prix, les frais de plateforme (calculés automatiquement) et les frais d'envoi. Le coût de revient est figé au moment de la vente et le stock est décrémenté.
+- **Filaments.** Bobines (matière, couleur, prix, poids restant), avec une alerte quand une bobine est presque vide.
+- **Bilan.** Chiffre d'affaires et bénéfice du mois et de l'année, détail par mois, par canal et par modèle, coût des impressions ratées, valeur du stock.
 
-```bash
-python3 slicer_service.py
-```
+## Calcul du coût
 
-Laisser cette fenêtre ouverte, puis utiliser l'application Pages normalement. Le compagnon écoute uniquement sur `127.0.0.1:48921` : les modèles restent sur l'ordinateur et ne sont envoyés à aucun serveur distant. Sur macOS, Bambu Studio est détecté automatiquement dans `/Applications`. Sous Linux, définir au besoin `BAMBU_STUDIO_BIN` et `BAMBU_STUDIO_RESOURCES`.
+Pour un plateau :
 
-Pour un STL, l'application utilise les profils officiels 0,4 mm / 0,20 mm P2S ou H2D installés, le matériau, le remplissage et l'activation des supports choisis. Pour un 3MF Bambu déjà tranché, ses métriques et paramètres embarqués sont prioritaires. Un 3MF projet non tranché est confié à Bambu Studio, qui exploite d'abord ses profils internes.
+| Poste | Formule |
+|---|---|
+| Filament | grammes × prix de la bobine au kg |
+| Électricité | puissance moyenne × durée × prix du kWh |
+| Amortissement | prix de la machine ÷ durée d'amortissement × durée |
+| Maintenance | € par heure d'impression × durée |
+| Risque d'échec | % appliqué aux quatre postes ci-dessus |
+| Ton temps | (préparation par plateau + finition × nombre de pièces) × taux horaire |
+| Emballage | € par pièce × nombre de pièces |
 
-## Valeurs personnelles initiales
+Coût de revient par pièce = total du plateau ÷ nombre de pièces.
+Prix conseillé = coût × (1 + marge), avec un prix minimum et un arrondi au choix (en « ,90 » par défaut).
+Prix par canal = prix de vente directe majoré des frais du canal, arrondi aux 10 centimes supérieurs, pour encaisser au moins autant qu'en vente directe.
 
-- P2S + 2 AMS : 1 000 €
-- H2D + 2 AMS : 2 200 €
+Le bénéfice affiché est ce qui reste **après** avoir payé ton temps au taux horaire choisi.
 
-Ces valeurs sont modifiables dans l'application.
+## Canaux et frais (valeurs d'octobre 2026, modifiables)
 
-## Calcul du prix conseillé
+| Canal | Commission | Fixe / commande |
+|---|---|---|
+| Vente directe, Vinted, Leboncoin, eBay (particulier) | 0 % | 0 € |
+| Etsy | 11,64 % (6,5 % transaction + 4 % paiement + 1,14 % frais réglementaires) | 0,48 € (0,30 € paiement + 0,18 € insertion) |
+| Whatnot | 10,9 % (8 % + 2,9 % paiement) | 0,30 € |
 
-Le coût réel additionne matière, électricité, amortissement machine, maintenance et risque d'échec. La marge est appliquée à ce coût, puis un forfait fixe de prise en charge est ajouté. Le prix conseillé ne descend jamais sous le minimum de facturation configuré.
+## Données
 
-Avec les réglages par défaut, une impression PLA de 70 g durant 1 h 50 sur P2S est conseillée à 10 €, hors expédition. Le forfait restant fixe, il ne gonfle pas artificiellement le tarif des grosses impressions.
+Tout est enregistré dans le navigateur (`localStorage`, clé `pc3d-v2`). Les données ne sont pas partagées entre deux navigateurs ni entre deux adresses : le fichier ouvert en local et la version GitHub Pages ont chacun leurs propres données. Réglages › Exporter / Importer permet de sauvegarder les données ou de les déplacer.
 
-## Prochaines étapes
+À la première ouverture, les réglages de la V1 (électricité, marge, risque, maintenance, prix et puissance des imprimantes) sont repris s'ils existent dans le même navigateur.
 
-1. Catalogue d'imprimantes avec profils techniques récupérés/validés automatiquement.
-2. Tarifs d'électricité par pays et fournisseur/source avec date de mise à jour.
-3. Catalogue de filaments et prix.
-4. Comparaison automatique entre imprimantes.
-5. PWA installable, comptes et synchronisation cloud.
+## Installer sur le téléphone
 
-> Les puissances moyennes présentes dans la V1 sont des estimations de travail et restent modifiables. Elles ne doivent pas être présentées comme des mesures constructeur tant qu'elles ne sont pas sourcées/validées.
+Sur iPhone, ouvrir le site dans Safari, puis Partager › « Sur l'écran d'accueil ». L'outil s'ouvre alors comme une application, avec son icône.
+
+## Compagnon de tranchage (optionnel)
+
+`slicer_service.py` peut encore trancher un STL avec Bambu Studio en local, mais l'interface ne l'utilise plus : il suffit de déposer le 3MF exporté par Bambu Studio (Fichier › Exporter › Exporter le fichier tranché du plateau).
