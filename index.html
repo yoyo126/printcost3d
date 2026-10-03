@@ -1959,10 +1959,13 @@ $('fSpool').addEventListener('submit', e => {
     price: num(f.price.value), weight: Math.max(1, num(f.weight.value)), remaining: num(f.remaining.value), date: f.date.value};
   const n = editingSpool || pendingTray ? 1 : Math.min(50, Math.max(1, parseInt(f.count.value) || 1));
   if (!$('trackBox').hidden) {
-    const dateChanged = f.trackDate.value !== spoolOpenVals.trackDate || f.trackBase.value !== spoolOpenVals.trackBase;
-    if (pendingTray || dateChanged || !editingSpool?.trackFrom) {
-      data.trackFrom = new Date((f.trackDate.value || today()) + 'T00:00').toISOString(); data.trackBase = num(f.trackBase.value);
-    } else if (f.remaining.value !== spoolOpenVals.remaining) { data.trackFrom = new Date().toISOString(); data.trackBase = data.remaining; }
+    const trackEdited = f.trackDate.value !== spoolOpenVals.trackDate || f.trackBase.value !== spoolOpenVals.trackBase;
+    if (!pendingTray && !trackEdited && f.remaining.value !== spoolOpenVals.remaining) {
+      // restant corrigé à la main : on repart de cette valeur, maintenant
+      data.trackFrom = new Date().toISOString(); data.trackBase = data.remaining; data.trackExact = true;
+    } else {
+      data.trackFrom = new Date((f.trackDate.value || today()) + 'T00:00').toISOString(); data.trackBase = num(f.trackBase.value); data.trackExact = false;
+    }
     if (pendingTray) Object.assign(data, {amsLoc: trayKey(pendingTray.t, pendingTray.dev), amsWhere: pendingTray.where, amsUuid: ''});
   }
   if (editingSpool) Object.assign(editingSpool, data); else for (let i = 0; i < n; i++) state.spools.push({id: uid(), ...data});
@@ -2031,12 +2034,14 @@ function fillSpoolFromCatalog(brand, c) {
   f.price.focus();
 }
 // Bobines sans puce reliées à un emplacement : restant = quantité de départ − grammes pris à cet emplacement depuis la mise en place
+const dayStart = iso => { const d = new Date(iso); d.setHours(0, 0, 0, 0); return d.getTime(); };
 function trackChipless() {
   const tasks = new Map([...(hist?.tasks || []), ...(bambu?.tasks || [])].map(t => [t.id, t]));
   let changed = false;
   for (const sp of state.spools) {
     if (sp.amsUuid || !sp.amsLoc || !sp.trackFrom) continue;
-    const [dev, idx] = sp.amsLoc.split(':'), from = Date.parse(sp.trackFrom);
+    // une date de mise en place compte depuis le début de cette journée ; un restant corrigé à la main compte à partir de l'instant même
+    const [dev, idx] = sp.amsLoc.split(':'), from = sp.trackExact ? Date.parse(sp.trackFrom) : dayStart(sp.trackFrom);
     let used = 0;
     for (const t of tasks.values()) {
       const end = Date.parse(t.end || t.start || ''); if (!end || t.device !== dev || t.status === 1 || end <= from) continue;
@@ -2544,7 +2549,7 @@ function syncAmsToSpools() {
     const upd = {amsWhere: x.where, amsLoc: trayKey(x.t, x.dev)};
     if (!sp.colorName && bambuColorName(x.t)) upd.colorName = bambuColorName(x.t);
     if (!sp.ref && bambuCatEntry(x.t)?.ref) upd.ref = bambuCatEntry(x.t).ref;
-    if (!x.t.rfid && !sp.trackFrom) { upd.trackFrom = new Date().toISOString(); upd.trackBase = sp.remaining; }
+    if (!x.t.rfid && !sp.trackFrom) { upd.trackFrom = new Date((sp.date || today()) + 'T00:00').toISOString(); upd.trackBase = sp.remaining; }
     if (x.t.rfid && x.t.grams != null) upd.remaining = x.t.grams;
     for (const [k, v] of Object.entries(upd)) if (sp[k] !== v) { sp[k] = v; changed = true; }
   }
