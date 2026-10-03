@@ -57,6 +57,12 @@ Variables Vercel : `DATABASE_URL` (Neon), `SESSION_SECRET`, `BAMBU_KEY`, `SETUP_
 
 **Sans serveur** (GitHub Pages, fichier ouvert en local) : tout reste dans le navigateur (`localStorage`, clé `pc3d-v2`), comme avant. Réglages › Exporter / Importer pour déplacer les données.
 
+## Catalogue de filaments
+
+« Ajouter une bobine » propose un catalogue : marque → matière → couleur (pastille et nom), avec le prix repris de ta dernière bobine identique. Les fichiers légers de `catalogue/` sont fabriqués par `node scripts/catalogue.mjs` (à relancer pour les mettre à jour) :
+- Bambu Lab : liste officielle des couleurs de Bambu Studio (noms en français, teintes exactes) — sert aussi à nommer les bobines lues dans l'AMS ;
+- autres marques : [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) (licence MIT, © Donkie), un fichier par marque chargé seulement à la demande.
+
 ## Installer sur le téléphone
 
 Sur iPhone, ouvrir le site dans Safari, puis Partager › « Sur l'écran d'accueil ». L'outil s'ouvre alors comme une application, avec son icône.

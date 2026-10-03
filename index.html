@@ -305,6 +305,14 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 .slot .name{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .slot .g{font-family:var(--display);font-weight:800;font-size:16px}
 .slot .link{font-size:12px;padding:4px 0;text-align:left}
+.colorGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;max-height:260px;overflow:auto;margin:10px 0 4px;padding:2px}
+.cBtn{display:flex;align-items:center;gap:8px;text-align:left;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:7px 9px;font-size:12.5px;line-height:1.25;min-width:0}
+.cBtn:hover{border-color:var(--brand)}
+.cBtn.on{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.cBtn .sw{width:24px;height:24px;border-radius:50%;flex:none;box-shadow:0 0 0 1.5px var(--line)}
+.cBtn span:last-child{overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.catPick{background:var(--card2);border:1px solid var(--line);border-radius:18px;padding:12px;margin-bottom:14px}
+.catPick h3{margin:0 0 8px}
 .slot .inStock{color:var(--ok);font-weight:650;font-size:12px}
 @media (max-width:680px){.slots{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .movedBanner{margin-bottom:14px}
@@ -576,8 +584,18 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 <!-- Bobine -->
 <dialog id="dlgSpool"><form method="dialog" id="fSpool">
   <div class="dHead"><h2 id="spoolTitle">Bobine</h2><button class="iconBtn" value="cancel" formnovalidate aria-label="Fermer">✕</button></div>
+  <div class="catPick" id="catPick">
+    <h3>Choisir dans un catalogue</h3>
+    <div class="grid2">
+      <label>Marque<select id="cBrand"></select></label>
+      <label>Matière<select id="cMat"></select></label>
+    </div>
+    <input id="cSearch" type="search" placeholder="Rechercher une couleur…" style="margin-top:10px">
+    <div id="cColors" class="colorGrid"></div>
+    <p class="hint" style="margin:0">Touche une couleur pour remplir la fiche. Sources : Bambu Studio (Bambu Lab), SpoolmanDB (autres marques).</p>
+  </div>
   <div class="grid2">
-    <label>Matière<input name="material" list="materials" required placeholder="PLA"></label>
+    <label>Matière<select name="material" required></select></label>
     <label>Marque<input name="brand" placeholder="Bambu Lab"></label>
     <label>Nom de la couleur<input name="colorName" placeholder="Blanc"></label>
     <label>Couleur<input name="color" type="color" value="#ffffff"></label>
@@ -586,7 +604,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <label>Restant (g)<input name="remaining" type="number" step="any" required inputmode="numeric"><small>Pour une bobine neuve, mets le poids net.</small></label>
     <label>Date d'achat<input name="date" type="date"></label>
   </div>
-  <datalist id="materials"><option>PLA</option><option>PLA Matte</option><option>PLA Silk</option><option>PLA-CF</option><option>PETG</option><option>PETG-CF</option><option>ABS</option><option>ASA</option><option>TPU</option><option>PA</option><option>PC</option><option>Support</option></datalist>
+  <label id="spoolCountWrap" style="margin-top:12px">Nombre de bobines identiques<input name="count" type="number" min="1" step="1" value="1" inputmode="numeric"><small>Pour un lot : crée autant de bobines que nécessaire.</small></label>
   <div class="dFoot"><button class="btn danger" type="button" id="delSpool">Supprimer</button><span style="flex:1"></span><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Enregistrer</button></div>
 </form></dialog>
 
@@ -1249,11 +1267,19 @@ function renderCalc() {
   fillAsmInputs(); renderFils(); updateResult();
 }
 // Matières proposées quand la ligne n'est pas reliée à une bobine du stock
-const MATERIALS = ['PLA', 'PLA Basic', 'PLA Matte', 'PLA Silk', 'PLA Translucent', 'PLA Galaxy', 'PLA Marble', 'PLA Metal', 'PLA-CF', 'PLA Tough',
-  'PETG', 'PETG HF', 'PETG Translucent', 'PETG-CF', 'ABS', 'ASA', 'TPU', 'PA', 'PA-CF', 'PAHT-CF', 'PC', 'PET-CF', 'PVA', 'Support'];
+const MAT_GROUPS = {
+  'PLA': ['PLA', 'PLA Basic', 'PLA Matte', 'PLA Silk', 'PLA Silk+', 'PLA Translucent', 'PLA Lite', 'PLA Tough', 'PLA Tough+', 'PLA Galaxy', 'PLA Marble', 'PLA Metal', 'PLA Sparkle', 'PLA Wood', 'PLA Glow', 'PLA-CF', 'PLA+'],
+  'PETG': ['PETG', 'PETG Basic', 'PETG HF', 'PETG Matte', 'PETG Translucent', 'PETG-CF'],
+  'ABS / ASA': ['ABS', 'ABS-GF', 'ASA', 'ASA-CF'],
+  'TPU': ['TPU', 'TPU 85A', 'TPU 90A', 'TPU 95A', 'TPU 95A HF', 'TPU for AMS'],
+  'Techniques': ['PA', 'PA-CF', 'PA6-GF', 'PAHT-CF', 'PC', 'PC FR', 'PET-CF', 'PPA-CF'],
+  'Support': ['PVA', 'Support for PLA/PETG', 'Support'],
+};
+const MATERIALS = Object.values(MAT_GROUPS).flat();
 function matOptions(cur) {
-  const list = cur && !MATERIALS.some(m => baseMat(m) === baseMat(cur)) ? [cur, ...MATERIALS] : MATERIALS;
-  return list.map(m => `<option${baseMat(m) === baseMat(cur) ? ' selected' : ''}>${esc(m)}</option>`).join('');
+  const known = !cur || MATERIALS.some(m => baseMat(m) === baseMat(cur));
+  return (known ? '' : `<option selected>${esc(cur)}</option>`) + Object.entries(MAT_GROUPS).map(([g, list]) =>
+    `<optgroup label="${esc(g)}">${list.map(m => `<option${cur && baseMat(m) === baseMat(cur) ? ' selected' : ''}>${esc(m)}</option>`).join('')}</optgroup>`).join('');
 }
 function renderFils() {
   const opts = sel => `<option value="">— Sans bobine du stock</option>` + state.spools.filter(s => s.remaining > 0 || s.id === sel)
@@ -1707,9 +1733,13 @@ $('newSpool').onclick = () => openSpool(null);
 function openSpool(s) {
   editingSpool = s; const f = $('fSpool');
   $('spoolTitle').textContent = s ? 'Modifier la bobine' : 'Nouvelle bobine 🧵'; $('delSpool').hidden = !s;
-  const d = s || {material:'PLA', brand:'Bambu Lab', colorName:'', color:'#ffffff', price:'', weight:1000, remaining:1000, date: today()};
-  ['material', 'brand', 'colorName', 'color', 'price', 'weight', 'remaining', 'date'].forEach(k => f[k].value = d[k] ?? '');
+  const d = s || {material:'PLA Basic', brand:'Bambu Lab', colorName:'', color:'#ffffff', price:'', weight:1000, remaining:1000, date: today()};
+  f.material.innerHTML = matOptions(d.material);
+  ['brand', 'colorName', 'color', 'price', 'weight', 'remaining', 'date'].forEach(k => f[k].value = d[k] ?? '');
+  f.count.value = 1; $('spoolCountWrap').hidden = !!s;
+  $('catPick').hidden = !!s;
   $('dlgSpool').showModal();
+  if (!s) openCatalogPicker();
 }
 $('fSpool').weight.addEventListener('input', e => { if (!editingSpool) $('fSpool').remaining.value = e.target.value; });
 $('delSpool').onclick = () => {
@@ -1724,9 +1754,69 @@ $('fSpool').addEventListener('submit', e => {
   const f = $('fSpool');
   const data = {material: f.material.value.trim() || 'PLA', brand: f.brand.value.trim(), colorName: f.colorName.value.trim(), color: f.color.value,
     price: num(f.price.value), weight: Math.max(1, num(f.weight.value)), remaining: num(f.remaining.value), date: f.date.value};
-  if (editingSpool) Object.assign(editingSpool, data); else state.spools.push({id: uid(), ...data});
-  save(); renderAll(); toast('🧵 Bobine enregistrée');
+  const n = editingSpool ? 1 : Math.min(50, Math.max(1, parseInt(f.count.value) || 1));
+  if (editingSpool) Object.assign(editingSpool, data); else for (let i = 0; i < n; i++) state.spools.push({id: uid(), ...data});
+  save(); renderAll(); toast(n > 1 ? `🧵 ${n} bobines ajoutées` : '🧵 Bobine enregistrée');
 });
+
+/* ---------- Catalogue de filaments (Bambu Lab + SpoolmanDB), chargé seulement quand on l'ouvre ---------- */
+const cat = {brands: null, data: {}};
+async function catLoad(brand) {
+  if (cat.data[brand]) return cat.data[brand];
+  if (brand === 'Bambu Lab') {
+    const j = await (await fetch('catalogue/bambu.json')).json();
+    return cat.data[brand] = j.colors.map(([material, name, hexes, filaId, code]) => ({material, name, hexes: hexes.split(','), weight: 1000, filaId, code}));
+  }
+  const b = cat.brands.find(x => x.brand === brand);
+  const rows = await (await fetch(`catalogue/m/${b.slug}.json`)).json();
+  return cat.data[brand] = rows.map(([material, name, hexes, weight, spoolWeight]) => ({material, name, hexes: hexes.split(','), weight, spoolWeight}));
+}
+async function openCatalogPicker() {
+  try {
+    if (!cat.brands) cat.brands = await (await fetch('catalogue/marques.json')).json();
+  } catch { $('cColors').innerHTML = '<p class="hint">Catalogue indisponible (connexion internet nécessaire). Remplis la fiche à la main.</p>'; return; }
+  $('cBrand').innerHTML = ['Bambu Lab', ...cat.brands.map(b => b.brand)].map(b => `<option>${esc(b)}</option>`).join('');
+  $('cBrand').value = 'Bambu Lab'; $('cSearch').value = '';
+  await catBrandChanged();
+}
+async function catBrandChanged() {
+  $('cColors').innerHTML = '<p class="hint">⏳ Chargement…</p>';
+  try {
+    const list = await catLoad($('cBrand').value);
+    const mats = [...new Set(list.map(x => x.material))].sort((a, b) => a.localeCompare(b));
+    $('cMat').innerHTML = mats.map(m => `<option>${esc(m)}</option>`).join('');
+    $('cMat').value = mats.includes('PLA Basic') ? 'PLA Basic' : mats.includes('PLA') ? 'PLA' : mats[0] || '';
+    renderCatColors();
+  } catch { $('cColors').innerHTML = '<p class="hint">Impossible de charger cette marque.</p>'; }
+}
+const swatchBg = hexes => hexes.length > 1 ? `linear-gradient(135deg,${hexes.map(h => '#' + h).join(',')})` : '#' + (hexes[0] || '999999');
+function renderCatColors() {
+  const list = cat.data[$('cBrand').value] || [], q = $('cSearch').value.trim().toLowerCase();
+  const shown = list.map((c, i) => [c, i]).filter(([c]) => q ? (c.name + ' ' + c.material).toLowerCase().includes(q) : c.material === $('cMat').value);
+  $('cColors').innerHTML = shown.map(([c, i]) => `<button type="button" class="cBtn" data-ci="${i}" title="${esc(c.material + ' · ' + c.name)}"><span class="sw" style="background:${swatchBg(c.hexes)}"></span><span>${esc(c.name || '(sans nom)')}${q ? `<br><span class="muted">${esc(c.material)}</span>` : ''}</span></button>`).join('')
+    || '<p class="hint">Aucune couleur trouvée.</p>';
+}
+$('cBrand').addEventListener('change', catBrandChanged);
+$('cMat').addEventListener('change', renderCatColors);
+$('cSearch').addEventListener('input', renderCatColors);
+$('cColors').addEventListener('click', e => {
+  const b = e.target.closest('[data-ci]'); if (!b) return;
+  const brand = $('cBrand').value, c = cat.data[brand][+b.dataset.ci], f = $('fSpool');
+  $('cColors').querySelectorAll('.on').forEach(x => x.classList.remove('on')); b.classList.add('on');
+  f.material.innerHTML = matOptions(c.material);
+  f.brand.value = brand; f.colorName.value = c.name; f.color.value = '#' + (c.hexes[0] || '999999').toLowerCase();
+  f.weight.value = c.weight || 1000; f.remaining.value = c.weight || 1000;
+  // prix : celui de ta dernière bobine identique (marque + matière), sinon le prix par défaut au kilo
+  const last = [...state.spools].reverse().find(s => s.brand === brand && baseMat(s.material) === baseMat(c.material) && s.price > 0);
+  f.price.value = last ? (spoolPerKg(last) * (c.weight || 1000) / 1000).toFixed(2) : (state.settings.defaultFilamentPrice * (c.weight || 1000) / 1000).toFixed(2);
+  f.price.focus();
+});
+// Nom français d'une bobine Bambu de l'AMS (identifiant filament + code couleur lus sur la puce)
+function bambuColorName(t) {
+  const list = cat.data['Bambu Lab']; if (!list || !t.filaId || !t.code) return '';
+  const code = String(t.code).split('-').pop();
+  return list.find(c => c.filaId === t.filaId && c.code === code)?.name || '';
+}
 
 /* ---------- Bilan ---------- */
 function renderReport() {
@@ -2014,6 +2104,7 @@ async function loadBambu(force = false) {
     bambu = r.ok ? r.data : {connected: false, error: r.data?.error || 'Erreur du serveur.'};
   } catch { bambu = {connected: false, error: 'Serveur injoignable.'}; }
   bambuLoading = false; bambuAt = Date.now();
+  await catLoad('Bambu Lab').catch(() => {});
   syncAmsToSpools(); renderBambu();
 }
 function renderBambu() {
@@ -2075,7 +2166,7 @@ function spoolForTray(t, devId) {
 }
 function spoolFromTray({t, dev, where}) {
   const weight = t.weight || 1000;
-  return {id: uid(), material: t.brand || t.type || 'PLA', brand: t.rfid ? 'Bambu Lab' : '', colorName: '', color: t.color || '#999999',
+  return {id: uid(), material: t.brand || t.type || 'PLA', brand: t.rfid ? 'Bambu Lab' : '', colorName: bambuColorName(t), color: t.color || '#999999',
     price: Math.round(state.settings.defaultFilamentPrice * weight / 10) / 100, weight, remaining: t.grams ?? weight, date: today(),
     amsUuid: t.uuid || '', amsLoc: trayKey(t, dev), amsWhere: where};
 }
@@ -2088,6 +2179,7 @@ function syncAmsToSpools() {
     const sp = spoolForTray(x.t, x.dev); if (!sp) continue;
     seen.add(sp.id);
     const upd = {amsWhere: x.where, amsLoc: trayKey(x.t, x.dev)};
+    if (!sp.colorName && bambuColorName(x.t)) upd.colorName = bambuColorName(x.t);
     if (x.t.rfid && x.t.grams != null) upd.remaining = x.t.grams;
     for (const [k, v] of Object.entries(upd)) if (sp[k] !== v) { sp[k] = v; changed = true; }
   }

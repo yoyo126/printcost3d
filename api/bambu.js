@@ -91,7 +91,7 @@ function tray(t, amsId, nozzle) {
   const grams = Number(t.remain_g) >= 0 && t.remain_g != null ? Number(t.remain_g) : (remain >= 0 && weight ? Math.round(remain * weight / 100) : null);
   return {ams: amsId, slot: Number(t.id) + 1, index: amsId == null ? null : amsId * 4 + Number(t.id), nozzle,
     type: t.tray_type || '', brand: t.tray_sub_brands || '', color: hex(t.tray_color), remain, grams, weight,
-    rfid: !!uuid, uuid, empty: !t.tray_type};
+    rfid: !!uuid, uuid, empty: !t.tray_type, filaId: t.tray_info_idx || '', code: t.tray_id_name || ''};
 }
 const nozzleOf = info => { const n = (parseInt(info, 16) >> 8) & 0xF; return Number.isFinite(n) ? n : null; };
 export function normPrinter(p = {}) {
