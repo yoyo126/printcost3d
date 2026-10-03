@@ -333,12 +333,15 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
         <div id="estBox" class="card" hidden>
           <div class="cardHead"><span class="badgeIcon">📐</span><h2>Estimation depuis le volume</h2></div>
           <div class="estGrid"><canvas id="preview" width="300" height="300"></canvas><div id="estInfo"></div></div>
-          <div class="grid3">
-            <label>Remplissage (%)<input id="eInfill" type="number" min="0" max="100" step="any" value="15" inputmode="numeric"></label>
-            <label>Matière<select id="eMat"></select></label>
-            <label>Débit moyen (g/h)<input id="eFlow" type="number" min="1" step="any" inputmode="numeric"><small>≈ 35 g/h sur Bambu en 0,20 mm.</small></label>
-          </div>
-          <p class="hint">Calcul : 2 parois + dessus/dessous, remplissage choisi, sans supports. Pour les chiffres exacts, tranche dans Bambu Studio et dépose le 3MF.</p>
+          <details class="fold" id="estParams"><summary><span><b style="font-size:15px">Paramètres</b><small id="estSum"></small></span></summary>
+            <div class="grid2">
+              <label>Remplissage (%)<input id="eInfill" type="number" min="0" max="100" step="any" value="15" inputmode="numeric"></label>
+              <label>Parois<input id="eWalls" type="number" min="1" step="any" value="2" inputmode="numeric"></label>
+              <label>Matière<select id="eMat"></select></label>
+              <label>Débit moyen (g/h)<input id="eFlow" type="number" min="1" step="any" inputmode="numeric"><small>≈ 35 g/h sur Bambu en 0,20 mm.</small></label>
+            </div>
+            <p class="hint">Calcul : parois + dessus/dessous, remplissage, sans supports. Pour les chiffres exacts, tranche dans Bambu Studio et dépose le 3MF.</p>
+          </details>
         </div>
 
         <div class="card">
@@ -455,6 +458,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   <h3>Imprimantes</h3>
   <div class="listEdit" id="printerEdit"></div>
   <button class="link" type="button" id="addPrinter">＋ Ajouter une imprimante</button>
+  <label style="margin-top:10px">Imprimante utilisée pour le calcul<select id="printerChoice"></select><small>Par défaut la plus chère, pour ne jamais sous-estimer le coût. Tu peux toujours en choisir une autre dans un calcul.</small></label>
   <h3>Canaux de vente</h3>
   <p class="hint">Commission en % du prix + frais fixes par commande. Valeurs relevées en octobre 2026, à vérifier si une plateforme change ses conditions.</p>
   <div class="listEdit" id="channelEdit"></div>
@@ -569,7 +573,7 @@ function defaultState() {
   return {
     version: 2,
     settings: {electricity:.25, maintenance:.10, lifeHours:5000, risk:7, defaultFilamentPrice:20, lowStock:150,
-      laborRate:15, prepMin:5, finishMin:2, packaging:.30, margin:100, minimumPrice:2, rounding:'0.90', monthlyGoal:0, estFlow:35},
+      laborRate:15, prepMin:5, finishMin:2, packaging:.30, margin:100, minimumPrice:2, rounding:'0.90', monthlyGoal:0, estFlow:35, printerMode:'fixed', defaultPrinter:'h2d'},
     printers: [
       {id:'p2s', name:'Bambu Lab P2S + 2 AMS', price:1000, power:120},
       {id:'h2d', name:'Bambu Lab H2D + 2 AMS', price:2200, power:160},
@@ -691,7 +695,7 @@ function parseSliceInfo(xml) {
     const filaments = [...pl.getElementsByTagName('filament')].map(f => ({
       material: (f.getAttribute('type') || 'PLA').trim(),
       color: (f.getAttribute('color') || '#999999').slice(0, 7),
-      grams: num(f.getAttribute('used_g')),
+      grams: num(f.getAttribute('used_g')), id: num(f.getAttribute('id')) || 1,
     })).filter(f => f.grams > 0);
     const objects = [...pl.getElementsByTagName('object')].filter(o => o.getAttribute('skipped') !== 'true').length;
     return {index: num(md.index) || 1, seconds: num(md.prediction), weight: num(md.weight), filaments, objects};
@@ -706,7 +710,7 @@ function parseGcodeHeader(txt) {
   const weights = wm ? wm[1].split(',').map(num).filter(x => x > 0) : [];
   const types = (head.match(/;\s*filament_type\s*=\s*([^\r\n]+)/i)?.[1] || '').split(';');
   const colors = (head.match(/;\s*filament_colour\s*=\s*([^\r\n]+)/i)?.[1] || '').split(';');
-  return {seconds, filaments: weights.map((g, i) => ({material: (types[i] || 'PLA').trim(), color: (colors[i] || '#999999').trim().slice(0, 7), grams: g}))};
+  return {seconds, filaments: weights.map((g, i) => ({material: (types[i] || 'PLA').trim(), color: (colors[i] || '#999999').trim().slice(0, 7), grams: g, id: i + 1}))};
 }
 async function thumbFrom(zip, i) {
   const name = [`Metadata/plate_${i}_small.png`, `Metadata/plate_${i}.png`, 'Metadata/plate_1.png'].find(n => zip.has(n));
@@ -718,6 +722,42 @@ async function thumbFrom(zip, i) {
     c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
     return c.toDataURL('image/png');
   } catch { return null; }
+}
+// Réglages du projet Bambu Studio (imprimante, remplissage, parois, filaments…)
+async function readProjectSettings(zip) {
+  if (!zip.has('Metadata/project_settings.config')) return null;
+  let j; try { j = JSON.parse(await zip.text('Metadata/project_settings.config')); } catch { return null; }
+  const arr = v => Array.isArray(v) ? v : v == null ? [] : String(v).split(';');
+  const one = v => arr(v)[0];
+  const opt = v => v == null || one(v) === '' ? null : num(one(v));
+  return {
+    printer: String(j.printer_model || one(j.printer_settings_id) || '').trim(),
+    materials: arr(j.filament_type).map(x => String(x).trim()),
+    colors: arr(j.filament_colour).map(x => String(x).trim().slice(0, 7)),
+    costs: arr(j.filament_cost).map(num),
+    dens: arr(j.filament_density).map(num),
+    infill: opt(j.sparse_infill_density), walls: opt(j.wall_loops), layer: opt(j.layer_height),
+  };
+}
+const prCode = n => String(n || '').replace(/^Bambu Lab\s*/i, '').replace(/\s*\d(\.\d+)?\s*mm?\s*nozzle.*$/i, '').replace(/\s*\d(\.\d+)?\s*nozzle.*$/i, '').trim().toUpperCase();
+const defaultPrinterId = () => state.printers.find(p => p.id === state.settings.defaultPrinter)?.id || [...state.printers].sort((a, b) => b.price - a.price)[0]?.id || '';
+function printerFor(cfg) {
+  if (state.settings.printerMode === 'file' && cfg?.printer) {
+    const code = prCode(cfg.printer), p = code && state.printers.find(x => x.name.toUpperCase().includes(code));
+    if (p) return p.id;
+  }
+  return defaultPrinterId();
+}
+function cfgLine(cfg) {
+  if (!cfg) return '';
+  const bits = [];
+  if (cfg.printer) bits.push(esc(cfg.printer));
+  if (cfg.infill != null) bits.push(`remplissage ${cfg.infill} %`);
+  if (cfg.walls) bits.push(`${cfg.walls} parois`);
+  if (cfg.layer) bits.push(`couche ${String(cfg.layer).replace('.', ',')} mm`);
+  const pr = state.printers.find(p => p.id === job.printerId);
+  const other = pr && cfg.printer && !pr.name.toUpperCase().includes(prCode(cfg.printer));
+  return bits.length ? `<br><span style="font-weight:500">⚙️ Réglé pour ${bits.join(' · ')}${other ? ` → calcul avec <b>${esc(pr.name)}</b>` : ''}</span>` : '';
 }
 async function read3mf(zip) {
   let plates = [];
@@ -881,10 +921,10 @@ function spoolSvg(color, ratio) {
 const emptyState = (emoji, title, text) => `<div class="card empty"><span class="big">${emoji}</span><b>${title}</b>${text}</div>`;
 
 /* ---------- Écran Calcul ---------- */
-let job, loadedPlates = [], est = null, autoName = '', resultOk = false, lastObjs = 0;
+let job, loadedPlates = [], est = null, autoName = '', resultOk = false, lastObjs = 0, fileCfg = null;
 function newJob() {
   const s = state.settings;
-  return {id:null, name:'', printerId: state.printers[0]?.id || '', hours:'', minutes:'', pieces:1,
+  return {id:null, name:'', printerId: defaultPrinterId(), hours:'', minutes:'', pieces:1,
     filaments:[blankFil()], prepMin:s.prepMin, finishMin:s.finishMin, packaging:s.packaging, price:'', thumb:null, estimated:false};
 }
 function blankFil() {
@@ -894,7 +934,8 @@ function blankFil() {
 }
 function filFromFile(f) {
   const sp = matchSpool(f);
-  return {spoolId: sp?.id || '', material: f.material, color: f.color, grams: Math.round(f.grams * 100) / 100, pricePerKg: sp ? spoolPerKg(sp) : state.settings.defaultFilamentPrice, fromFile: true};
+  const cost = fileCfg?.costs?.[(f.id || 1) - 1];
+  return {spoolId: sp?.id || '', material: f.material, color: f.color, grams: Math.round(f.grams * 100) / 100, pricePerKg: sp ? spoolPerKg(sp) : cost > 0 ? cost : state.settings.defaultFilamentPrice, fromFile: true};
 }
 const spoolLabel = s => `${s.material}${s.colorName ? ' · ' + s.colorName : ''}${s.brand ? ' · ' + s.brand : ''} (${gr(s.remaining)} · ${eur(spoolPerKg(s))}/kg)`;
 
@@ -1024,7 +1065,7 @@ function setInfo(html, kind) { const i = $('fileInfo'); i.hidden = false; i.clas
 async function handleFile(file) {
   if (!file) return;
   const lower = file.name.toLowerCase();
-  $('plateBox').hidden = true; $('estBox').hidden = true; loadedPlates = []; est = null; lastObjs = 0;
+  $('plateBox').hidden = true; $('estBox').hidden = true; loadedPlates = []; est = null; lastObjs = 0; fileCfg = null;
   if (!/\.(3mf|stl)$/.test(lower)) { setInfo(`${esc(file.name)} : format non reconnu. Choisis un fichier .3mf ou .stl.`, 'err'); return; }
   setInfo('⏳ Lecture du fichier…');
   const base = file.name.replace(/\.gcode\.3mf$/i, '').replace(/\.(3mf|stl)$/i, '');
@@ -1033,6 +1074,8 @@ async function handleFile(file) {
   try {
     if (lower.endsWith('.stl')) { startEstimate(parseStl(await file.arrayBuffer()), 1, file.name); return; }
     const zip = await openZip(file);
+    fileCfg = await readProjectSettings(zip);
+    job.printerId = printerFor(fileCfg);
     loadedPlates = await read3mf(zip);
     if (loadedPlates.length) {
       const first = loadedPlates.length > 1 ? 'all' : '0';
@@ -1046,7 +1089,7 @@ async function handleFile(file) {
     }
     const mesh = await meshFrom3mf(zip);
     if (!mesh) throw new Error('Ce 3MF ne contient ni tranchage ni modèle 3D lisible.');
-    startEstimate(mesh.tris, mesh.items, file.name);
+    startEstimate(mesh.tris, mesh.items, file.name, fileCfg);
   } catch (e) { console.error(e); setInfo(esc(e.message || 'Fichier illisible.'), 'err'); renderCalc(); }
 }
 function applyPlate(v) {
@@ -1065,41 +1108,48 @@ function applyPlate(v) {
   job.thumb = ps[0].thumb || job.thumb;
   const unmatched = job.filaments.filter(l => !l.spoolId).length;
   const missing = (loadedPlates.total || 0) - loadedPlates.length;
-  setInfo(`${job.thumb ? `<img src="${job.thumb}" alt="">` : ''}<span>✓ ${esc(applyPlate.fileName || 'Fichier')}<br><span style="font-weight:500">${v === 'all' && ps.length > 1 ? `${ps.length} plateaux` : 'Tranché'} : ${dur(secs / 3600)} · ${gr(merged.reduce((a, f) => a + f.grams, 0))}${objs ? ` · ${objs} objet${objs > 1 ? 's' : ''}` : ''}</span>`
+  setInfo(`${job.thumb ? `<img src="${job.thumb}" alt="">` : ''}<span>✓ ${esc(applyPlate.fileName || 'Fichier')}<br><span style="font-weight:500">${v === 'all' && ps.length > 1 ? `${ps.length} plateaux` : 'Tranché'} : ${dur(secs / 3600)} · ${gr(merged.reduce((a, f) => a + f.grams, 0))}${objs ? ` · ${objs} objet${objs > 1 ? 's' : ''}` : ''}</span>${cfgLine(fileCfg)}`
     + (missing > 0 ? `<br><span style="font-weight:600;color:var(--warn)">⚠️ ${missing} plateau${missing > 1 ? 'x' : ''} sur ${loadedPlates.total} pas encore tranché${missing > 1 ? 's' : ''}, donc non compté${missing > 1 ? 's' : ''}. Dans Bambu Studio : « Trancher tout », puis enregistre le projet.</span>` : '') + '</span>');
   renderCalc();
   if (unmatched) toast(`${unmatched} couleur${unmatched > 1 ? 's' : ''} sans bobine correspondante dans le stock`);
 }
 $('plateSel').onchange = () => applyPlate($('plateSel').value);
 
-function startEstimate(tris, items, fileName) {
+function startEstimate(tris, items, fileName, cfg = null) {
   if (!tris.length) throw new Error('Le modèle 3D est vide.');
   const st = meshStats(tris);
   if (!(st.V > 0)) throw new Error('Impossible de calculer le volume de ce modèle.');
-  est = {...st, items};
+  est = {...st, items, cfg};
   $('estBox').hidden = false;
-  const first = job.filaments[0], cur = first && Object.keys(DENS).find(k => matOk(first.material, k));
+  const first = job.filaments[0], want = cfg?.materials?.[0] || first?.material, cur = want && Object.keys(DENS).find(k => matOk(want, k));
   $('eMat').innerHTML = Object.keys(DENS).map(k => `<option>${k}</option>`).join('');
   $('eMat').value = cur || 'PLA'; $('eFlow').value = state.settings.estFlow;
+  $('eInfill').value = cfg?.infill ?? 15;
+  $('eWalls').value = cfg?.walls || 2;
+  $('estParams').open = !cfg;
   job.thumb = renderPreview(tris, $('preview'));
   job.pieces = 1; lastObjs = items;
-  setInfo(`<img src="${job.thumb}" alt=""><span>📐 ${esc(fileName)}<br><span style="font-weight:500">Pas de tranchage dans ce fichier : prix estimé depuis le volume.</span></span>`, 'est');
+  setInfo(`<img src="${job.thumb}" alt=""><span>📐 ${esc(fileName)}<br><span style="font-weight:500">Pas de tranchage dans ce fichier : prix estimé depuis le volume.</span>${cfgLine(cfg)}</span>`, 'est');
   applyEstimate();
 }
 function applyEstimate() {
   if (!est) return;
   const s = state.settings, infill = Math.min(100, Math.max(0, num($('eInfill').value))) / 100, mat = $('eMat').value, flow = Math.max(1, num($('eFlow').value) || 35);
   if (s.estFlow !== flow) { s.estFlow = flow; save(); }
-  const shell = Math.min(est.V, est.A * 0.9), vol = shell + (est.V - shell) * infill, g = vol / 1000 * (DENS[mat] || 1.24), h = g / flow + 0.1;
+  const walls = Math.max(1, num($('eWalls').value) || 2), cfg = est.cfg, fromCfg = cfg?.materials?.[0] && matOk(cfg.materials[0], mat);
+  const dens = fromCfg && cfg.dens[0] > 0 ? cfg.dens[0] : (DENS[mat] || 1.24), color = fromCfg && cfg.colors[0] ? cfg.colors[0] : '#999999';
+  const shell = Math.min(est.V, est.A * walls * 0.45), vol = shell + (est.V - shell) * infill, g = vol / 1000 * dens, h = g / flow + 0.1;
   const mins = Math.round(h * 60); job.hours = Math.floor(mins / 60); job.minutes = mins % 60; job.estimated = true;
   const keep = job.filaments[0] && matOk(job.filaments[0].material, mat) ? job.filaments[0] : null;
-  const sp = keep?.spoolId ? spoolById(keep.spoolId) : state.spools.find(x => x.remaining > 0 && matOk(x.material, mat));
-  job.filaments = [{spoolId: sp?.id || '', material: sp?.material || mat, color: sp?.color || '#999999', grams: Math.round(g * 10) / 10, pricePerKg: sp ? spoolPerKg(sp) : s.defaultFilamentPrice}];
+  const sp = keep?.spoolId ? spoolById(keep.spoolId) : (matchSpool({material: mat, color}) || state.spools.find(x => x.remaining > 0 && matOk(x.material, mat)));
+  const cost = fromCfg && cfg.costs[0] > 0 ? cfg.costs[0] : s.defaultFilamentPrice;
+  job.filaments = [{spoolId: sp?.id || '', material: sp?.material || mat, color: sp?.color || color, grams: Math.round(g * 10) / 10, pricePerKg: sp ? spoolPerKg(sp) : cost, fromFile: !!fromCfg}];
+  $('estSum').textContent = `${mat} · remplissage ${Math.round(infill * 100)} % · ${walls} parois · ${flow} g/h${cfg ? ' — lus dans le fichier' : ''}`;
   const [x, y, z] = est.size.map(v => Math.round(v));
   $('estInfo').innerHTML = `<b>${x} × ${y} × ${z} mm</b><br>Volume ${(est.V / 1000).toLocaleString('fr-FR', {maximumFractionDigits: 1})} cm³ · ${est.items} objet${est.items > 1 ? 's' : ''}<br>≈ <b style="font-size:15px">${gr(g)}</b> · ≈ <b style="font-size:15px">${dur(h)}</b>`;
   renderCalc();
 }
-['eInfill', 'eMat', 'eFlow'].forEach(id => $(id).addEventListener('input', applyEstimate));
+['eInfill', 'eWalls', 'eMat', 'eFlow'].forEach(id => $(id).addEventListener('input', applyEstimate));
 
 $('file').onchange = e => { handleFile(e.target.files[0]); e.target.value = ''; };
 // Glisser-déposer n'importe où sur la page
@@ -1114,7 +1164,7 @@ addEventListener('drop', e => {
   const f = e.dataTransfer.files[0]; if (f) { showTab('calc'); handleFile(f); }
 });
 
-$('resetJob').onclick = () => { job = newJob(); loadedPlates = []; est = null; autoName = ''; lastObjs = 0; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); window.scrollTo({top: 0}); };
+$('resetJob').onclick = () => { job = newJob(); loadedPlates = []; est = null; autoName = ''; lastObjs = 0; fileCfg = null; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); window.scrollTo({top: 0}); };
 document.addEventListener('click', e => { if (e.target.id === 'cancelEdit') $('resetJob').click(); });
 $('saveModel').onclick = () => {
   job.name = job.name.trim() || 'Modèle sans nom';
@@ -1426,6 +1476,13 @@ function renderChart(rows, now) {
 
 /* ---------- Réglages ---------- */
 let draftPrinters, draftChannels;
+function renderPrinterChoice(value) {
+  const sel = $('printerChoice'), cur = value ?? sel.value;
+  const top = [...draftPrinters].sort((a, b) => b.price - a.price)[0];
+  sel.innerHTML = draftPrinters.map(p => `<option value="fixed:${esc(p.id)}">Toujours ${esc(p.name)}${p === top ? ' (la plus chère)' : ''}</option>`).join('')
+    + '<option value="file">Celle prévue dans le fichier (sinon la plus chère)</option>';
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : `fixed:${top?.id || ''}`;
+}
 function renderListEdits() {
   $('printerEdit').innerHTML = draftPrinters.map((p, i) => `<div class="row" data-i="${i}">
     <label>Nom<input data-k="name" value="${esc(p.name)}"></label>
@@ -1437,9 +1494,10 @@ function renderListEdits() {
     <label>Commission (%)<input data-k="pct" type="number" min="0" max="99" step="any" value="${esc(c.pct)}"></label>
     <label>Fixe / commande (€)<input data-k="fixed" type="number" min="0" step="any" value="${esc(c.fixed)}"></label>
     <button type="button" class="iconBtn" data-del="${i}" aria-label="Supprimer">✕</button></div>`).join('');
+  if (draftPrinters) renderPrinterChoice();
 }
 function bindListEdit(el, get) {
-  el.addEventListener('input', e => { const r = e.target.closest('.row'), k = e.target.dataset.k; if (!r || !k) return; const o = get()[+r.dataset.i]; o[k] = k === 'name' ? e.target.value : num(e.target.value); });
+  el.addEventListener('input', e => { const r = e.target.closest('.row'), k = e.target.dataset.k; if (!r || !k) return; const o = get()[+r.dataset.i]; o[k] = k === 'name' ? e.target.value : num(e.target.value); if (el.id === 'printerEdit') renderPrinterChoice(); });
   el.addEventListener('click', e => { const d = e.target.closest('[data-del]'); if (!d) return; get().splice(+d.dataset.del, 1); renderListEdits(); });
 }
 bindListEdit($('printerEdit'), () => draftPrinters);
@@ -1450,7 +1508,7 @@ $('settingsBtn').onclick = () => {
   const f = $('fSettings');
   Object.entries(state.settings).forEach(([k, v]) => { if (f[k]) f[k].value = v; });
   draftPrinters = JSON.parse(JSON.stringify(state.printers)); draftChannels = JSON.parse(JSON.stringify(state.channels));
-  renderListEdits(); $('dlgSettings').showModal();
+  renderListEdits(); renderPrinterChoice(state.settings.printerMode === 'file' ? 'file' : `fixed:${defaultPrinterId()}`); $('dlgSettings').showModal();
 };
 $('fSettings').addEventListener('submit', e => {
   if (e.submitter?.value !== 'save') return;
@@ -1460,6 +1518,9 @@ $('fSettings').addEventListener('submit', e => {
   if (!draftPrinters.length) draftPrinters.push({id: uid(), name: 'Imprimante', price: 0, power: 100});
   if (!draftChannels.length) draftChannels.push({id: 'direct', name: 'Vente directe', pct: 0, fixed: 0});
   draftChannels.forEach(c => c.pct = Math.min(99, Math.max(0, c.pct)));
+  const pc = $('printerChoice').value;
+  state.settings.printerMode = pc === 'file' ? 'file' : 'fixed';
+  if (pc.startsWith('fixed:')) state.settings.defaultPrinter = pc.slice(6);
   state.printers = draftPrinters; state.channels = draftChannels;
   save(); renderAll(); toast('Réglages enregistrés');
 });
