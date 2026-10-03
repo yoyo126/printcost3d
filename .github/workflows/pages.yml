@@ -1,4 +1,4 @@
-# Static PrintCost 3D deployment
+# Ancienne adresse GitHub Pages : page de redirection vers la version Vercel (dossier pages/)
 name: Deploy static site to Pages
 
 on:
@@ -29,7 +29,7 @@ jobs:
       - name: Upload static files
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: pages
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

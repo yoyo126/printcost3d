@@ -179,6 +179,11 @@ export default async function handler(req, res) {
   await schema();
   if (!requireAuth(req, res)) return;
   try {
+    if (req.method === 'GET' && req.query?.info) {
+      // état de la connexion sans appeler Bambu (pour prévenir avant l'expiration)
+      const [row] = await sql`select account, expires_at, token_enc is not null as linked from pc_bambu where id = 1`;
+      return res.json({connected: !!row?.linked, account: row?.account || '', expires: row?.expires_at || null});
+    }
     if (req.method === 'GET') return res.json(req.query?.history ? await history(req.query.history === 'full') : await status());
     if (req.method !== 'POST') return res.status(405).json({error: 'Méthode non autorisée.'});
     if (!sameOrigin(req)) return res.status(403).json({error: 'Origine refusée.'});

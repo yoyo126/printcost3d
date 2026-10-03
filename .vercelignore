@@ -4,3 +4,4 @@ test_slicer_service.py
 .agents
 skills-lock.json
 scripts
+pages
