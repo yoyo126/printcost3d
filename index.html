@@ -258,6 +258,11 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .pill.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 .pill.brand{background:var(--brand-soft);color:var(--brand-ink);border-color:transparent}
 .spool{width:76px;height:76px}
+.subList{margin-top:10px;display:grid;gap:8px}
+.sub{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:13px}
+.sub:hover{border-color:var(--brand)}
+.subTop{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.sub .bar{margin:6px 0 4px}
 .bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:8px}
 .bar i{display:block;height:100%;border-radius:4px;background:var(--brand)}
 .bar.low i{background:var(--bad)}
@@ -567,6 +572,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <div id="secHist" hidden><div class="card" id="histCard"></div></div>
     <div id="secStock">
       <div class="toolbar"><span class="hint" id="spoolSummary" style="margin:0"></span><button class="btn primary" id="newSpool">＋ Ajouter une bobine</button></div>
+      <div class="search" style="max-width:none;margin-bottom:12px"><input id="spoolSearch" type="search" placeholder="Rechercher une couleur, une référence, un emplacement…"></div>
       <div id="spoolList" class="items"></div>
       <label class="check" style="margin-top:14px"><input type="checkbox" id="showEmpty"> Afficher les bobines vides</label>
     </div>
@@ -1946,26 +1952,60 @@ $('salesTable').addEventListener('click', e => { const tr = e.target.closest('[d
 
 /* ---------- Filaments ---------- */
 let editingSpool = null;
+// Stock regroupé par référence (marque + référence, sinon marque + matière + couleur) : total en kg, bobines en machine / en réserve
+const kgTxt = g => `${(g / 1000).toLocaleString('fr-FR', {maximumFractionDigits: 2})} kg`;
+const spoolKey = s => (s.brand || '').toLowerCase().replace(/\s+/g, '') + '|' + (s.ref ? 'ref:' + s.ref : `${baseMat(s.material)}|${(s.colorName || s.color || '').toLowerCase()}`);
+let openGroups = new Set();
+function spoolRow(s, low) {
+  const ratio = Math.max(0, Math.min(1, s.remaining / s.weight)), isLow = s.remaining < low;
+  const where = s.amsWhere ? `📍 ${esc(s.amsWhere)}` : s.remaining >= s.weight ? '📦 neuve, en réserve' : '📦 en réserve';
+  const how = s.amsUuid ? 'lu sur l’imprimante' : s.trackFrom ? `calculé (${gr(s.trackUsed || 0)} utilisés depuis le ${fmtDate(new Date(s.trackFrom).toLocaleDateString('sv'))})` : '';
+  return `<div class="sub" data-spool="${s.id}"><div class="subTop"><span>${where}</span><b class="${isLow ? 'neg' : ''}">${gr(s.remaining)}</b></div>
+    <div class="bar ${isLow ? 'low' : ''}"><i style="width:${ratio * 100}%"></i></div>
+    <div class="meta">${how ? how + ' · ' : ''}${eur(s.price)} les ${gr(s.weight)}${s.date ? ' · acheté le ' + fmtDate(s.date) : ''} · <span class="link" style="padding:0">modifier</span></div></div>`;
+}
 function renderSpools() {
-  const low = state.settings.lowStock, all = $('showEmpty').checked;
-  const list = state.spools.filter(s => all || s.remaining > 0).sort((a, b) => a.material.localeCompare(b.material) || (a.colorName || '').localeCompare(b.colorName || ''));
+  const low = state.settings.lowStock, all = $('showEmpty').checked, q = ($('spoolSearch')?.value || '').trim().toLowerCase();
+  const list = state.spools.filter(s => all || s.remaining > 0)
+    .filter(s => !q || [s.material, s.colorName, s.brand, s.ref, s.amsWhere].join(' ').toLowerCase().includes(q));
+  const groups = new Map();
+  for (const sp of list) { const k = spoolKey(sp); groups.has(k) ? groups.get(k).push(sp) : groups.set(k, [sp]); }
+  const sorted = [...groups.entries()].sort(([, a], [, b]) => a[0].material.localeCompare(b[0].material) || (a[0].colorName || '').localeCompare(b[0].colorName || ''));
   const active = state.spools.filter(s => s.remaining > 0);
   const totalG = active.reduce((a, s) => a + s.remaining, 0), totalV = active.reduce((a, s) => a + s.remaining * spoolPerKg(s) / 1000, 0);
-  $('spoolSummary').textContent = `${active.length} bobine${active.length > 1 ? 's' : ''} · ${gr(totalG)} · valeur ${eur(totalV)}`;
-  $('spoolList').innerHTML = list.map(s => {
-    const ratio = Math.max(0, Math.min(1, s.remaining / s.weight)), isLow = s.remaining < low;
-    return `<div class="item" data-spool="${s.id}" style="cursor:pointer">
-      ${spoolSvg(s.color, ratio)}
-      <div><h4>${esc(s.material)}${s.colorName ? ' · ' + esc(s.colorName) : ''}</h4>
-        <div class="meta">${esc(s.brand || 'Marque ?')}${s.ref ? ' · réf. ' + esc(s.ref) : ''} · ${eur(s.price)} les ${gr(s.weight)}<br>${eur(spoolPerKg(s))}/kg${s.date ? ' · acheté le ' + fmtDate(s.date) : ''}</div>
-        ${s.amsWhere ? `<div style="margin-top:4px"><span class="pill brand">📍 ${esc(s.amsWhere)}</span>${s.amsUuid ? ' <span class="meta">restant lu sur l’imprimante</span>' : s.trackFrom ? ` <span class="meta">restant calculé : ${gr(s.trackUsed || 0)} utilisés depuis le ${fmtDate(new Date(s.trackFrom).toLocaleDateString('sv'))}</span>` : ''}</div>` : ''}
-        <div class="priceTag"><b class="${isLow ? 'neg' : ''}">${gr(s.remaining)}</b><span class="meta">restants</span> ${s.remaining <= 0 ? '<span class="pill">vide</span>' : isLow ? '<span class="pill bad">bientôt vide</span>' : ''}</div>
-        <div class="bar ${isLow ? 'low' : ''}"><i style="width:${ratio * 100}%"></i></div>
+  const refs = new Set(active.map(spoolKey)).size;
+  $('spoolSummary').textContent = `${active.length} bobine${active.length > 1 ? 's' : ''} · ${refs} référence${refs > 1 ? 's' : ''} · ${totalG >= 1000 ? kgTxt(totalG) : gr(totalG)} · valeur ${eur(totalV)}`;
+  $('spoolList').innerHTML = sorted.map(([k, sps]) => {
+    const s = sps[0], total = sps.reduce((a, x) => a + Math.max(0, x.remaining), 0), cap = sps.reduce((a, x) => a + x.weight, 0);
+    const inMachine = sps.filter(x => x.amsWhere), reserve = sps.length - inMachine.length, isLow = total < low, open = openGroups.has(k);
+    return `<div class="item grp${open ? ' open' : ''}" data-grp="${esc(k)}" style="cursor:pointer">
+      ${spoolSvg(s.color, cap ? total / cap : 0)}
+      <div style="min-width:0"><h4>${esc(s.material)}${s.colorName ? ' · ' + esc(s.colorName) : ''}${sps.length > 1 ? ` <span class="pill brand">×${sps.length}</span>` : ''}</h4>
+        <div class="meta">${esc(s.brand || 'Marque ?')}${s.ref ? ' · réf. ' + esc(s.ref) : ''} · ${eur(spoolPerKg(s))}/kg</div>
+        <div class="priceTag"><b class="${isLow ? 'neg' : ''}">${total >= 1000 ? kgTxt(total) : gr(total)}</b><span class="meta">${sps.length > 1 ? 'au total' : 'restants'}</span> ${total <= 0 ? '<span class="pill">vide</span>' : isLow ? '<span class="pill bad">bientôt vide</span>' : ''}</div>
+        <div class="meta">${inMachine.map(x => `📍 ${esc(x.amsWhere)} (${gr(x.remaining)})`).join(' · ')}${inMachine.length && reserve ? ' · ' : ''}${reserve ? `📦 ${reserve} en réserve` : ''}</div>
+        <div class="actions"><button class="btn small" data-plus="${esc(s.id)}">＋1 identique</button>${sps.length > 1 ? `<button class="btn small" data-toggle>${open ? 'Masquer' : 'Voir'} les ${sps.length} bobines</button>` : ''}</div>
+        ${open && sps.length > 1 ? `<div class="subList">${sps.map(x => spoolRow(x, low)).join('')}</div>` : ''}
       </div></div>`;
-  }).join('') || emptyState('🧵', 'Aucune bobine', 'Ajoute tes bobines : le coût utilisera ton vrai prix d’achat et le stock se mettra à jour à chaque impression.');
+  }).join('') || (q ? emptyState('🔍', 'Aucune bobine trouvée', 'Essaie une autre couleur ou référence.') : emptyState('🧵', 'Aucune bobine', 'Ajoute tes bobines : le coût utilisera ton vrai prix d’achat et le stock se mettra à jour à chaque impression.'));
 }
 $('showEmpty').onchange = renderSpools;
-$('spoolList').addEventListener('click', e => { const it = e.target.closest('[data-spool]'); if (it) openSpool(spoolById(it.dataset.spool)); });
+$('spoolSearch').addEventListener('input', renderSpools);
+$('spoolList').addEventListener('click', e => {
+  const plus = e.target.closest('[data-plus]');
+  if (plus) {
+    const src = spoolById(plus.dataset.plus); if (!src) return;
+    const {material, brand, ref, colorName, color, price, weight} = src;
+    state.spools.push({id: uid(), material, brand, ref, colorName, color, price, weight, remaining: weight, date: today()});
+    save(); renderSpools(); toast(`🧵 +1 ${material}${colorName ? ' ' + colorName : ''} en réserve`);
+    return;
+  }
+  const sub = e.target.closest('[data-spool]'); if (sub) { openSpool(spoolById(sub.dataset.spool)); return; }
+  const g = e.target.closest('[data-grp]'); if (!g) return;
+  const k = g.dataset.grp, n = state.spools.filter(x => spoolKey(x) === k && ($('showEmpty').checked || x.remaining > 0));
+  if (n.length === 1 && !e.target.closest('[data-toggle]')) { openSpool(n[0]); return; }
+  openGroups.has(k) ? openGroups.delete(k) : openGroups.add(k); renderSpools();
+});
 $('newSpool').onclick = () => openSpool(null);
 function openSpool(s) {
   editingSpool = s; const f = $('fSpool');
