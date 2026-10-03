@@ -84,14 +84,14 @@ button{font:inherit;cursor:pointer;color:inherit}
 .btn.danger{color:var(--bad)}
 .btn.small{padding:7px 11px;font-size:13px;border-radius:10px;box-shadow:none}
 .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
-.link{border:0;background:none;color:var(--brand-ink);font-weight:700;padding:6px 2px}
+.link{border:0;background:none;color:var(--brand-ink);font-weight:700;padding:8px 2px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:var(--shadow);margin-bottom:14px}
 .cardHead{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .cardHead h2{margin:0}
 .badgeIcon{width:34px;height:34px;border-radius:11px;background:var(--brand-soft);color:var(--brand-ink);display:grid;place-items:center;font-size:17px;flex:none}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.grid4{display:grid;grid-template-columns:2fr 1.3fr 1fr 1fr;gap:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:end}
+.grid4{display:grid;grid-template-columns:1.5fr 1.6fr .75fr .75fr;gap:12px;align-items:end}
 .full{grid-column:1/-1}
 label{display:block;font-size:13px;font-weight:650}
 label small,.hint{display:block;margin-top:5px;color:var(--muted);font-weight:400;font-size:12px;line-height:1.45}
@@ -183,7 +183,9 @@ details.fold[open] summary{margin-bottom:14px}
 .hero .alert{margin-top:12px;background:#00000030;border-radius:12px;padding:9px 12px;font-size:13px;font-weight:600}
 .priceIn{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .priceIn label{flex:1}
-.actionsBar{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-bottom:14px}
+.actionsBar{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.actionsBar .btn.primary{grid-column:1/-1}
+.btn.sell{background:var(--ok-soft);color:var(--ok);border-color:transparent}
 .costRow{display:grid;grid-template-columns:1fr 64px auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
 .costRow span{color:var(--muted)}
 .costRow b{text-align:right;min-width:58px}
@@ -203,6 +205,11 @@ th{text-align:left;color:var(--muted);font-weight:600;font-size:12px;padding:6px
 td{padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
 tr:last-child td{border-bottom:0}
 td.n,th.n{text-align:right;white-space:nowrap}
+td.d{white-space:nowrap}
+.task{padding:12px 0;border-bottom:1px dashed var(--line)}
+.task:last-child{border-bottom:0}
+.task .tTitle{font-weight:700;overflow-wrap:anywhere}
+.task .tActs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 tbody tr[data-sale]:hover{background:var(--card2)}
 .tableWrap{overflow-x:auto;margin:0 -4px}
 
@@ -210,8 +217,8 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px;box-shadow:var(--shadow)}
 .kpi .ic{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-size:17px;background:var(--brand-soft);margin-bottom:10px}
-.kpi span{display:block;color:var(--muted);font-size:12.5px;font-weight:600}
-.kpi b{display:block;font-family:var(--display);font-size:23px;font-weight:800;margin-top:2px;letter-spacing:-.02em}
+.kpi>span{display:block;color:var(--muted);font-size:12.5px;font-weight:600}
+.kpi>b{display:block;font-family:var(--display);font-size:23px;font-weight:800;margin-top:2px;letter-spacing:-.02em}
 
 /* Listes (catalogue, bobines) */
 .items{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
@@ -270,7 +277,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 .dFoot{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
 .listEdit{display:grid;gap:10px}
 .listEdit .row{display:grid;grid-template-columns:1.6fr 1fr 1fr 34px;gap:10px;align-items:end;padding-bottom:10px;border-bottom:1px dashed var(--line)}
-.toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-20px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:16px;font-weight:650;opacity:0;transition:.25s;pointer-events:none;z-index:90;max-width:90vw;box-shadow:0 12px 30px #0003}
+.toast{position:fixed;left:50%;top:18px;width:max-content;max-width:min(92vw,440px);text-align:center;transform:translateX(-50%) translateY(-20px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:16px;font-weight:650;opacity:0;transition:.25s;pointer-events:none;z-index:90;max-width:90vw;box-shadow:0 12px 30px #0003}
 .toast.show{opacity:1;transform:translateX(-50%)}
 #confetti{position:fixed;inset:0;pointer-events:none;z-index:85}
 .headRight{display:flex;align-items:center;gap:8px}
@@ -319,10 +326,37 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   .listEdit .row>:first-child{grid-column:1/-1}
   .hideSm{display:none}
   .stack{grid-template-columns:1fr}
+  .grid4>:nth-child(2){grid-column:1/-1}
+  .filRow{grid-template-columns:30px 1fr 40px}
+  .filRow .fsel{grid-column:2/4}
+  .filRow .fgr{grid-column:2/3}
+  .filRow .fdel{grid-column:3/4}
+  .filRow .manual{grid-column:2/4}
+  .filRow .swatch{grid-row:1;align-self:end}
+  .toolbar .search{max-width:none;flex:1 1 100%}
+  #salesMonth{flex:1;min-width:0}
+  .toolbar .btn{white-space:nowrap}
+  .kpi{padding:12px}
+  .kpi .ic{width:28px;height:28px;font-size:15px;margin-bottom:6px;border-radius:9px}
+  .kpi>b{font-size:21px}
+  .chart .col:nth-child(even):not(.now) .lbl{visibility:hidden}
+  .sumBar{gap:8px;padding:10px 10px 10px 14px}
+  .sumBar .btn{padding:10px 12px}
+  .sumBar b{font-size:22px}
+  dialog .grid2,dialog .grid3{grid-template-columns:1fr}
+  dialog form{padding:18px 16px}
+  dialog{width:calc(100vw - 20px)}
   .items{grid-template-columns:1fr}
   .estGrid{grid-template-columns:110px 1fr}
   #preview{width:110px;height:110px}
   .drop{padding:16px}
+}
+@media (max-width:380px){
+  table{font-size:12.5px}
+  th,td{padding:8px 3px}
+  .avatar{display:none}
+  .card{padding:14px}
+  .hero .big{font-size:40px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -433,14 +467,16 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
           <label>Ton prix de vente (€)<input id="jPrice" type="number" min="0" step="any" inputmode="decimal" placeholder="Vide = prix conseillé"></label>
         </div>
         <div class="actionsBar">
-          <button class="btn" id="resetJob">Nouveau</button>
           <button class="btn primary" id="saveModel">Ajouter au catalogue</button>
+          <button class="btn sell" id="sellJob">💸 Vendu</button>
+          <button class="btn" id="resetJob">Nouveau</button>
         </div>
         <div id="jDetails"></div>
       </aside>
     </div>
     <div class="sumBar" id="sumBar">
       <button class="sp" id="sumGo" aria-label="Voir le détail du prix"><small id="sumLabel">Prix conseillé</small><b id="sumPrice">—</b><small id="sumSub"></small></button>
+      <button class="btn" id="sumSell">💸 Vendu</button>
       <button class="btn" id="sumSave">Ajouter</button>
     </div>
   </section>
@@ -633,7 +669,7 @@ const num = v => { const n = parseFloat(String(v ?? '').replace(',', '.')); retu
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const eurFmt = new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR'});
 const eur = n => eurFmt.format(n || 0);
-const gr = n => `${Math.round(n || 0).toLocaleString('fr-FR')} g`;
+const gr = n => `${(Math.abs(n || 0) < 10 && (n || 0) % 1 ? Math.round(n * 10) / 10 : Math.round(n || 0)).toLocaleString('fr-FR')} g`;
 const pct = n => `${(n || 0).toLocaleString('fr-FR', {maximumFractionDigits:1})} %`;
 const dur = h => { const t = Math.round((h || 0) * 60), H = Math.floor(t / 60), M = t % 60; return H ? `${H} h ${String(M).padStart(2, '0')}` : `${M} min`; };
 const monthLabel = k => { const [y, m] = k.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', {month:'long', year:'numeric'}); };
@@ -1219,9 +1255,9 @@ function renderFils() {
     const sp = l.spoolId && spoolById(l.spoolId), color = sp ? sp.color : l.color;
     return `<div class="filRow" data-i="${i}">
       <span class="swatch" style="background:${esc(color)}" title="${esc(l.material)}"></span>
-      <label>Bobine${!sp && l.fromFile ? ` <small style="display:inline">(fichier : ${esc(l.material)})</small>` : ''}<select data-k="spoolId">${opts(l.spoolId)}</select></label>
-      <label>Grammes<input data-k="grams" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.grams)}" placeholder="0"></label>
-      <button class="iconBtn" data-del="${i}" title="Retirer" aria-label="Retirer ce filament">✕</button>
+      <label class="fsel">Bobine${!sp && l.fromFile ? ` <small style="display:inline">(fichier : ${esc(l.material)})</small>` : ''}<select data-k="spoolId">${opts(l.spoolId)}</select></label>
+      <label class="fgr">Grammes<input data-k="grams" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.grams)}" placeholder="0"></label>
+      <button class="iconBtn fdel" data-del="${i}" title="Retirer" aria-label="Retirer ce filament">✕</button>
       <div class="filStat" data-stat="${i}"></div>
       ${sp ? '' : `<div class="manual"><label>Matière<input data-k="material" value="${esc(l.material)}"></label><label>Prix (€/kg)<input data-k="pricePerKg" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.pricePerKg)}"></label></div>`}
     </div>`;
@@ -1262,7 +1298,7 @@ function updateResult() {
   $('laborSum').textContent = `${num(job.prepMin)} min de préparation · ${num(job.finishMin)} min/pièce · ${eur(num(job.packaging))} d'emballage`;
   updateFilStats(); updateAsmTexts(c);
   resultOk = c.h > 0 && c.grams > 0;
-  $('saveModel').disabled = $('sumSave').disabled = !resultOk;
+  $('saveModel').disabled = $('sumSave').disabled = $('sellJob').disabled = $('sumSell').disabled = !resultOk;
   if (!resultOk) {
     $('jHero').innerHTML = `<div class="hero empty"><div class="label">Prix de vente conseillé</div><div class="big">— €</div>
       <p class="hint" style="margin:0">Dépose un fichier, ou indique le temps d'impression et les grammes de filament : le prix s'affiche ici au fur et à mesure.</p></div>`;
@@ -1292,7 +1328,7 @@ function updateResult() {
       ${fixed && profit < 0 ? `<div class="alert">⚠️ Ce prix est sous ton coût de revient : tu perds ${eur(-profit)} par pièce.</div>` : ''}
     </div>`;
   $('jDetails').innerHTML = `
-    <div class="card"><div class="cardHead"><span class="badgeIcon">🧾</span><h2>Coût par pièce</h2></div>
+    <div class="card"><div class="cardHead"><span class="badgeIcon">🧾</span><h2>Détail du coût${c.pcs > 1 ? ' par pièce' : ''}</h2></div>
       ${parts.map(([l, v]) => `<div class="costRow"><span>${l}</span><div class="mini"><i style="width:${(v / maxPart * 100).toFixed(1)}%"></i></div><b>${eur(v)}</b></div>`).join('')}
       <div class="costRow total"><span>Coût de revient</span><span></span><b>${eur(c.unit)}</b></div>
       ${c.pcs > 1 ? `<p class="hint">Plateau de ${c.pcs} pièces : ${eur(c.total)} au total, ${dur(c.h)}, ${gr(c.grams)}.</p>` : ''}
@@ -1301,10 +1337,10 @@ function updateResult() {
       <div class="tableWrap"><table><thead><tr><th>Canal</th><th class="n">Prix affiché</th><th class="n">Encaissé</th><th class="n">Bénéfice</th></tr></thead><tbody>${chRows}</tbody></table></div>
       <p class="hint">Prix à afficher sur chaque canal pour encaisser au moins autant qu'en vente directe à ${eur(price)}.</p>
     </div>`;
-  $('sumLabel').textContent = `${fixed ? 'Ton prix' : 'Prix conseillé'} ${c.pcs > 1 ? `par pièce (×${c.pcs})` : 'pour l’ensemble'}${job.estimated ? ' (≈)' : ''}`;
+  $('sumLabel').textContent = `${fixed ? 'Ton prix' : 'Prix conseillé'}${c.pcs > 1 ? ' / pièce' : ''}${job.estimated ? ' (≈)' : ''}`;
   renderSplit(c.pcs);
   $('sumPrice').textContent = eur(price);
-  $('sumSub').textContent = `coût ${eur(c.unit)} · bénéfice ${eur(profit)}`;
+  $('sumSub').textContent = `coût ${eur(c.unit)} · +${eur(profit)}`;
   updateSumBar();
 }
 // Objets du fichier : un seul produit (par défaut) ou des pièces vendues séparément
@@ -1326,6 +1362,14 @@ function updateSumBar() { $('sumBar').classList.toggle('show', resultOk && !hero
 new IntersectionObserver(([e]) => { heroVisible = e.isIntersecting; updateSumBar(); }).observe($('jHero'));
 $('sumGo').onclick = () => $('jHero').scrollIntoView({behavior: reduceMotion ? 'auto' : 'smooth', block: 'start'});
 $('sumSave').onclick = () => $('saveModel').click();
+// Vendu directement depuis le calcul : la vente part dans Ventes, sans passer par le catalogue
+$('sellJob').onclick = () => {
+  if (!resultOk) return;
+  if (job.id && state.models.some(m => m.id === job.id)) return openSale(null, job.id);   // modèle du catalogue en cours de modification
+  const c = computeCost(job), name = (job.name || '').trim() || 'Impression';
+  openSale(null, '', {name, unitCost: c.unit, price: modelPrice(job, c), note: job.estimated ? 'Coût estimé (fichier non tranché)' : ''});
+};
+$('sumSell').onclick = () => $('sellJob').click();
 
 function setInfo(html, kind) { const i = $('fileInfo'); i.hidden = false; i.className = 'fileInfo' + (kind ? ' ' + kind : ''); i.innerHTML = html; }
 async function handleFile(file) {
@@ -1454,7 +1498,7 @@ $('saveModel').onclick = () => {
 function renderCatalog() {
   const q = $('catSearch').value.trim().toLowerCase();
   const list = state.models.filter(m => !q || m.name.toLowerCase().includes(q));
-  $('catCount').textContent = `${state.models.length} modèle${state.models.length > 1 ? 's' : ''} · ${state.models.reduce((a, m) => a + (m.stock || 0), 0)} pièces en stock`;
+  $('catCount').textContent = `${state.models.length} modèle${state.models.length > 1 ? 's' : ''} · ${(n => `${n} pièce${n > 1 ? 's' : ''} en stock`)(state.models.reduce((a, m) => a + (m.stock || 0), 0))}`;
   $('catList').innerHTML = list.map(m => {
     const c = computeCost(m), p = modelPrice(m, c), pr = state.printers.find(x => x.id === m.printerId);
     const colors = m.filaments.map(l => { const sp = spoolById(l.spoolId); return `<span class="dot" style="background:${esc(sp ? sp.color : l.color)}"></span>`; }).join('');
@@ -1480,8 +1524,8 @@ function renderCatalog() {
       </div></div>`;
   }).join('') || (q ? emptyState('🔍', 'Aucun modèle trouvé', 'Essaie un autre mot.') : emptyState('🧊', 'Ton catalogue est vide', 'Calcule un modèle dans l’onglet Calcul puis touche « Ajouter au catalogue ».'));
   const log = state.prints.slice(0, 15);
-  $('printLog').innerHTML = log.length ? `<div class="tableWrap"><table><thead><tr><th>Date</th><th>Modèle</th><th class="n">Plateaux</th><th class="n">Filament</th><th class="n">Pièces</th><th></th></tr></thead><tbody>${log.map(p => `<tr>
-      <td>${fmtDate(p.date)}</td><td>${esc(p.name)}${p.failed ? ' <span class="pill bad">ratée</span>' : ''}</td><td class="n">${p.plates}</td><td class="n">${gr(p.grams)}</td><td class="n">${p.failed ? '—' : '+' + p.pieces}</td>
+  $('printLog').innerHTML = log.length ? `<div class="tableWrap"><table><thead><tr><th>Date</th><th>Modèle</th><th class="n hideSm">Plateaux</th><th class="n">Filament</th><th class="n">Pièces</th><th></th></tr></thead><tbody>${log.map(p => `<tr>
+      <td class="d">${fmtDate(p.date)}</td><td>${esc(p.name)}${p.failed ? ' <span class="pill bad">ratée</span>' : ''}</td><td class="n hideSm">${p.plates}</td><td class="n">${gr(p.grams)}</td><td class="n">${p.failed ? '—' : '+' + p.pieces}</td>
       <td class="n"><button class="iconBtn" data-undo="${p.id}" title="Annuler cette impression" aria-label="Annuler cette impression">↺</button></td></tr>`).join('')}</tbody></table></div>`
     : '<p class="hint" style="margin:0">Aucune impression enregistrée. Le bouton « Imprimer » d’un modèle déduit le filament des bobines et ajoute les pièces au stock.</p>';
 }
@@ -1624,7 +1668,7 @@ function renderSales() {
     + kpi('🏷️', 'Frais + envois', eur(sum(s => s.fees + s.shipping))) + kpi('✨', 'Bénéfice', `<span class="${p >= 0 ? 'pos' : 'neg'}">${eur(p)}</span>`);
   const chName = id => state.channels.find(c => c.id === id)?.name || '—';
   $('salesTable').innerHTML = list.length ? `<thead><tr><th>Date</th><th>Article</th><th class="hideSm">Canal</th><th class="n">Qté</th><th class="n">CA</th><th class="n">Bénéfice</th></tr></thead><tbody>${list.map(s => `<tr data-sale="${s.id}" style="cursor:pointer">
-    <td>${fmtDate(s.date)}</td><td>${esc(s.name)}${s.note ? `<div class="hint" style="margin:0">${esc(s.note)}</div>` : ''}</td><td class="hideSm">${esc(chName(s.channelId))}</td><td class="n">${s.qty}</td><td class="n">${eur(saleRev(s))}</td><td class="n ${saleProfit(s) >= 0 ? 'pos' : 'neg'}">${eur(saleProfit(s))}</td></tr>`).join('')}</tbody>`
+    <td class="d">${fmtDate(s.date)}</td><td>${esc(s.name)}${s.note ? `<div class="hint" style="margin:0">${esc(s.note)}</div>` : ''}</td><td class="hideSm">${esc(chName(s.channelId))}</td><td class="n">${s.qty}</td><td class="n">${eur(saleRev(s))}</td><td class="n ${saleProfit(s) >= 0 ? 'pos' : 'neg'}">${eur(saleProfit(s))}</td></tr>`).join('')}</tbody>`
     : `<tbody><tr><td><div class="empty"><span class="big">🛒</span><b>Aucune vente sur cette période</b>Touche « Nouvelle vente » ou « Vendre » sur un modèle du catalogue.</div></td></tr></tbody>`;
 }
 $('salesMonth').onchange = renderSales;
@@ -1967,7 +2011,7 @@ async function loadBambu(force = false) {
 }
 function renderBambu() {
   const box = $('bambuCard'); box.hidden = !cloud.logged; if (box.hidden) return;
-  const head = `<div class="cardHead"><span class="badgeIcon">🛰️</span><h2>Imprimantes Bambu</h2>${bambu?.connected ? `<button class="link" id="bRefresh" style="margin-left:auto">${bambuLoading ? '⏳ Lecture…' : '↻ Actualiser'}</button>` : ''}</div>`;
+  const head = `<div class="cardHead"><span class="badgeIcon">🛰️</span><h2>Imprimantes Bambu</h2>${bambu?.connected ? `<button class="link" id="bRefresh" style="margin-left:auto" aria-label="Actualiser">${bambuLoading ? '⏳' : '↻'}<span class="hideSm">${bambuLoading ? ' Lecture…' : ' Actualiser'}</span></button>` : ''}</div>`;
   if (!bambu) { box.innerHTML = head + '<p class="hint" style="margin:0">⏳ Lecture de ton compte Bambu…</p>'; return; }
   if (!bambu.connected) {
     box.innerHTML = head + `<p class="hint" style="margin-top:0">${bambu.expired ? '⚠️ La connexion à ton compte Bambu a expiré. ' : ''}${bambu.error ? esc(bambu.error) + ' ' : ''}Connecte ton compte Bambu Lab pour voir ce qu’il reste dans l’AMS de tes imprimantes et l’historique de tes impressions (lecture seulement).</p>
@@ -1995,16 +2039,17 @@ function renderBambu() {
   }).join('') || '<p class="hint">Aucune imprimante trouvée sur ce compte.</p>';
   const unlinked = allTrays().filter(({t, dev}) => !t.empty && !spoolForTray(t, dev)).length;
   const devName = id => bambu.devices.find(d => d.id === id)?.name || '';
-  const tasks = (bambu.tasks || []).slice(0, 12).map(t => `<tr><td>${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) : ''}</td>
-    <td>${esc(t.title)}<div class="hint" style="margin:0">${esc(t.deviceName || devName(t.device))}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''}</div>
-      <div class="trays" style="margin-top:4px">${t.ams.map(m => `<span class="tray"><span class="dot" style="background:${esc(m.color || '#999')}"></span>${esc(m.letter || m.type)} · ${gr(m.weight)}</span>`).join('')}</div></td>
-    <td class="n">${gr(t.weight)}<div class="hint" style="margin:0">${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</div>
-      ${t.weight > 0 ? `<div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button class="btn small" data-tsell="${esc(t.id)}">💸 Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">🧮 Calculer</button></div>` : ''}</td></tr>`).join('');
+  const tasks = (bambu.tasks || []).slice(0, 12).map(t => `<div class="task">
+    <div class="tTitle">${esc((t.title || 'Impression').replace(/_/g, ' ').replace(/\s+/g, ' ').trim())}</div>
+    <div class="hint" style="margin:2px 0 0">${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) + ' · ' : ''}${esc(t.deviceName || devName(t.device))}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''} · <b>${gr(t.weight)}</b> · ${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</div>
+    <div class="trays" style="margin-top:6px">${t.ams.map(m => `<span class="tray"><span class="dot" style="background:${esc(m.color || '#999')}"></span>${esc(m.letter || m.type)} · ${gr(m.weight)}</span>`).join('')}</div>
+    ${t.weight > 0 ? `<div class="tActs"><button class="btn small" data-tsell="${esc(t.id)}">💸 Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">🧮 Calculer</button></div>` : ''}
+  </div>`).join('');
   box.innerHTML = head + `<p class="hint" style="margin-top:0">Compte ${esc(bambu.account || '')} · <button class="link" id="bLogout">Déconnecter</button></p>
     ${unlinked ? `<div class="notice" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🧵 ${unlinked} bobine${unlinked > 1 ? 's' : ''} de l’AMS pas encore dans ton stock. <button class="btn small primary" id="bAddAll">Tout ajouter au stock</button></div>` : ''}
     ${devs}
     ${bambu.amsError ? `<div class="notice warn">AMS non lu : ${esc(bambu.amsError)}</div>` : ''}
-    ${tasks ? `<h3 style="margin-top:14px">Dernières impressions</h3><div class="tableWrap"><table><tbody>${tasks}</tbody></table></div>` : ''}
+    ${tasks ? `<h3 style="margin-top:16px">Dernières impressions</h3>${tasks}` : ''}
     <p class="hint">Les quantités viennent de l’imprimante, seulement pour les bobines Bambu à puce (la H2D les donne en grammes, la P2S en %). Les bobines du stock reliées à l’AMS se mettent à jour toutes seules.</p>`;
 }
 // Une bobine Bambu à puce est reconnue partout par son identifiant ; une bobine sans puce par son emplacement.
