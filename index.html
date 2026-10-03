@@ -327,6 +327,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
           </div>
         </div>
         <div id="fileInfo" class="fileInfo" hidden></div>
+        <div id="splitBox" class="notice" hidden style="margin-top:-6px;margin-bottom:14px"></div>
         <div id="plateBox" class="card" hidden><label>Plateau<select id="plateSel"></select></label></div>
 
         <div id="estBox" class="card" hidden>
@@ -351,7 +352,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
         </div>
 
         <div class="card">
-          <div class="cardHead"><span class="badgeIcon">🧵</span><h2>Filament</h2><label style="margin-left:auto;width:120px">Pièces / plateau<input id="jPieces" type="number" min="1" step="any" inputmode="numeric"></label></div>
+          <div class="cardHead"><span class="badgeIcon">🧵</span><h2>Filament</h2><label style="margin-left:auto;width:130px">Pièces vendues<input id="jPieces" type="number" min="1" step="any" inputmode="numeric"></label></div>
           <div id="jFils"></div>
           <button class="link" id="addFil">＋ Ajouter une couleur</button>
         </div>
@@ -370,7 +371,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
       <aside class="calcSide" id="calcSide">
         <div id="jHero"></div>
         <div class="card priceIn">
-          <label>Ton prix de vente par pièce (€)<input id="jPrice" type="number" min="0" step="any" inputmode="decimal" placeholder="Vide = prix conseillé"></label>
+          <label>Ton prix de vente (€)<input id="jPrice" type="number" min="0" step="any" inputmode="decimal" placeholder="Vide = prix conseillé"></label>
         </div>
         <div class="actionsBar">
           <button class="btn" id="resetJob">Nouveau</button>
@@ -730,6 +731,9 @@ async function read3mf(zip) {
   }
   plates = plates.filter(p => p.seconds > 0 && p.filaments.length);
   for (const p of plates) p.thumb = await thumbFrom(zip, p.index);
+  // Plateaux du projet (y compris ceux pas encore tranchés)
+  const ms = zip.has('Metadata/model_settings.config') ? await zip.text('Metadata/model_settings.config') : '';
+  plates.total = Math.max(plates.length, (ms.match(/<plate>/g) || []).length);
   return plates;
 }
 
@@ -877,7 +881,7 @@ function spoolSvg(color, ratio) {
 const emptyState = (emoji, title, text) => `<div class="card empty"><span class="big">${emoji}</span><b>${title}</b>${text}</div>`;
 
 /* ---------- Écran Calcul ---------- */
-let job, loadedPlates = [], est = null, autoName = '', resultOk = false;
+let job, loadedPlates = [], est = null, autoName = '', resultOk = false, lastObjs = 0;
 function newJob() {
   const s = state.settings;
   return {id:null, name:'', printerId: state.printers[0]?.id || '', hours:'', minutes:'', pieces:1,
@@ -969,9 +973,10 @@ function updateResult() {
   }).join('');
   $('jHero').innerHTML = `
     <div class="hero">
-      <div class="label">${fixed ? 'Ton prix de vente' : 'Prix de vente conseillé'} · par pièce${job.estimated ? ' · ≈ estimation' : ''}</div>
+      <div class="label">${fixed ? 'Ton prix de vente' : 'Prix de vente conseillé'} · ${c.pcs > 1 ? `par pièce (plateau de ${c.pcs})` : 'pour l’ensemble'}${job.estimated ? ' · ≈ estimation' : ''}</div>
       <div class="big">${eur(price)}</div>
       <div class="chips">
+        ${c.pcs > 1 ? `<span class="chip">Total ${c.pcs} pièces : coût <b>${eur(c.total)}</b> → vente <b>${eur(price * c.pcs)}</b></span>` : ''}
         <span class="chip">Coût <b>${eur(c.unit)}</b></span>
         <span class="chip">Bénéfice <b>${eur(profit)}</b></span>
         <span class="chip">Marge <b>${pct(rate)}</b></span>
@@ -989,11 +994,25 @@ function updateResult() {
       <div class="tableWrap"><table><thead><tr><th>Canal</th><th class="n">Prix affiché</th><th class="n">Encaissé</th><th class="n">Bénéfice</th></tr></thead><tbody>${chRows}</tbody></table></div>
       <p class="hint">Prix à afficher sur chaque canal pour encaisser au moins autant qu'en vente directe à ${eur(price)}.</p>
     </div>`;
-  $('sumLabel').textContent = `${fixed ? 'Ton prix' : 'Prix conseillé'} par pièce${job.estimated ? ' (≈)' : ''}`;
+  $('sumLabel').textContent = `${fixed ? 'Ton prix' : 'Prix conseillé'} ${c.pcs > 1 ? `par pièce (×${c.pcs})` : 'pour l’ensemble'}${job.estimated ? ' (≈)' : ''}`;
+  renderSplit(c.pcs);
   $('sumPrice').textContent = eur(price);
   $('sumSub').textContent = `coût ${eur(c.unit)} · bénéfice ${eur(profit)}`;
   updateSumBar();
 }
+// Objets du fichier : un seul produit (par défaut) ou des pièces vendues séparément
+function renderSplit(pcs) {
+  const box = $('splitBox');
+  box.hidden = !(lastObjs > 1);
+  if (box.hidden) return;
+  box.innerHTML = pcs === 1
+    ? `🧩 ${lastObjs} objets dans le fichier, comptés comme <b>un seul produit</b>. <button class="link" data-split="${lastObjs}">Je les vends séparément (coût ÷ ${lastObjs})</button>`
+    : `🧩 Coût réparti sur <b>${pcs} pièces</b> vendues séparément. <button class="link" data-split="1">Compter comme un seul produit</button>`;
+}
+$('splitBox').addEventListener('click', e => {
+  const b = e.target.closest('[data-split]'); if (!b) return;
+  job.pieces = +b.dataset.split; $('jPieces').value = job.pieces; updateResult();
+});
 // Barre de prix en bas d'écran (téléphone/tablette) quand le résultat n'est pas visible
 let heroVisible = true;
 function updateSumBar() { $('sumBar').classList.toggle('show', resultOk && !heroVisible && $('calc').classList.contains('active')); }
@@ -1005,7 +1024,7 @@ function setInfo(html, kind) { const i = $('fileInfo'); i.hidden = false; i.clas
 async function handleFile(file) {
   if (!file) return;
   const lower = file.name.toLowerCase();
-  $('plateBox').hidden = true; $('estBox').hidden = true; loadedPlates = []; est = null;
+  $('plateBox').hidden = true; $('estBox').hidden = true; loadedPlates = []; est = null; lastObjs = 0;
   if (!/\.(3mf|stl)$/.test(lower)) { setInfo(`${esc(file.name)} : format non reconnu. Choisis un fichier .3mf ou .stl.`, 'err'); return; }
   setInfo('⏳ Lecture du fichier…');
   const base = file.name.replace(/\.gcode\.3mf$/i, '').replace(/\.(3mf|stl)$/i, '');
@@ -1016,12 +1035,14 @@ async function handleFile(file) {
     const zip = await openZip(file);
     loadedPlates = await read3mf(zip);
     if (loadedPlates.length) {
+      const first = loadedPlates.length > 1 ? 'all' : '0';
       if (loadedPlates.length > 1) {
-        $('plateSel').innerHTML = loadedPlates.map((p, i) => `<option value="${i}">Plateau ${p.index} · ${dur(p.seconds / 3600)} · ${gr(p.filaments.reduce((a, f) => a + f.grams, 0))}</option>`).join('')
-          + `<option value="all">Tous les plateaux ensemble</option>`;
-        $('plateSel').value = '0'; $('plateBox').hidden = false;
+        const all = loadedPlates.reduce((a, p) => ({s: a.s + p.seconds, g: a.g + p.filaments.reduce((b, f) => b + f.grams, 0)}), {s: 0, g: 0});
+        $('plateSel').innerHTML = `<option value="all">Tout le fichier (${loadedPlates.length} plateaux) · ${dur(all.s / 3600)} · ${gr(all.g)}</option>`
+          + loadedPlates.map((p, i) => `<option value="${i}">Plateau ${p.index} seul · ${dur(p.seconds / 3600)} · ${gr(p.filaments.reduce((a, f) => a + f.grams, 0))}</option>`).join('');
+        $('plateSel').value = first; $('plateBox').hidden = false;
       }
-      applyPlate('0'); return;
+      applyPlate(first); return;
     }
     const mesh = await meshFrom3mf(zip);
     if (!mesh) throw new Error('Ce 3MF ne contient ni tranchage ni modèle 3D lisible.');
@@ -1040,10 +1061,12 @@ function applyPlate(v) {
   job.hours = Math.floor(mins / 60); job.minutes = mins % 60; job.estimated = false;
   job.filaments = merged.map(filFromFile);
   const objs = ps.reduce((a, p) => a + (p.objects || 0), 0);
-  if (objs > 0) job.pieces = objs;
+  job.pieces = 1; lastObjs = objs;
   job.thumb = ps[0].thumb || job.thumb;
   const unmatched = job.filaments.filter(l => !l.spoolId).length;
-  setInfo(`${job.thumb ? `<img src="${job.thumb}" alt="">` : ''}<span>✓ ${esc(applyPlate.fileName || 'Fichier')}<br><span style="font-weight:500">Tranché : ${dur(secs / 3600)} · ${gr(merged.reduce((a, f) => a + f.grams, 0))}${objs ? ` · ${objs} objet${objs > 1 ? 's' : ''}` : ''}</span></span>`);
+  const missing = (loadedPlates.total || 0) - loadedPlates.length;
+  setInfo(`${job.thumb ? `<img src="${job.thumb}" alt="">` : ''}<span>✓ ${esc(applyPlate.fileName || 'Fichier')}<br><span style="font-weight:500">${v === 'all' && ps.length > 1 ? `${ps.length} plateaux` : 'Tranché'} : ${dur(secs / 3600)} · ${gr(merged.reduce((a, f) => a + f.grams, 0))}${objs ? ` · ${objs} objet${objs > 1 ? 's' : ''}` : ''}</span>`
+    + (missing > 0 ? `<br><span style="font-weight:600;color:var(--warn)">⚠️ ${missing} plateau${missing > 1 ? 'x' : ''} sur ${loadedPlates.total} pas encore tranché${missing > 1 ? 's' : ''}, donc non compté${missing > 1 ? 's' : ''}. Dans Bambu Studio : « Trancher tout », puis enregistre le projet.</span>` : '') + '</span>');
   renderCalc();
   if (unmatched) toast(`${unmatched} couleur${unmatched > 1 ? 's' : ''} sans bobine correspondante dans le stock`);
 }
@@ -1059,7 +1082,7 @@ function startEstimate(tris, items, fileName) {
   $('eMat').innerHTML = Object.keys(DENS).map(k => `<option>${k}</option>`).join('');
   $('eMat').value = cur || 'PLA'; $('eFlow').value = state.settings.estFlow;
   job.thumb = renderPreview(tris, $('preview'));
-  job.pieces = items;
+  job.pieces = 1; lastObjs = items;
   setInfo(`<img src="${job.thumb}" alt=""><span>📐 ${esc(fileName)}<br><span style="font-weight:500">Pas de tranchage dans ce fichier : prix estimé depuis le volume.</span></span>`, 'est');
   applyEstimate();
 }
@@ -1091,7 +1114,7 @@ addEventListener('drop', e => {
   const f = e.dataTransfer.files[0]; if (f) { showTab('calc'); handleFile(f); }
 });
 
-$('resetJob').onclick = () => { job = newJob(); loadedPlates = []; est = null; autoName = ''; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); window.scrollTo({top: 0}); };
+$('resetJob').onclick = () => { job = newJob(); loadedPlates = []; est = null; autoName = ''; lastObjs = 0; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); window.scrollTo({top: 0}); };
 document.addEventListener('click', e => { if (e.target.id === 'cancelEdit') $('resetJob').click(); });
 $('saveModel').onclick = () => {
   job.name = job.name.trim() || 'Modèle sans nom';
@@ -1106,7 +1129,7 @@ $('saveModel').onclick = () => {
   if (!save()) return;
   toast(isNew ? '✨ Ajouté au catalogue' : 'Modèle mis à jour');
   if (isNew) confetti();
-  job = newJob(); est = null; autoName = ''; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc();
+  job = newJob(); est = null; autoName = ''; lastObjs = 0; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc();
   showTab('catalog'); window.scrollTo({top: 0});
 };
 
@@ -1147,7 +1170,7 @@ $('catSearch').oninput = renderCatalog;
 $('catList').addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const m = state.models.find(x => x.id === b.dataset.id); if (!m) return;
-  if (b.dataset.act === 'edit') { job = JSON.parse(JSON.stringify(m)); loadedPlates = []; est = null; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); showTab('calc'); window.scrollTo(0, 0); }
+  if (b.dataset.act === 'edit') { job = JSON.parse(JSON.stringify(m)); loadedPlates = []; est = null; lastObjs = 0; $('fileInfo').hidden = true; $('plateBox').hidden = true; $('estBox').hidden = true; renderCalc(); showTab('calc'); window.scrollTo(0, 0); }
   if (b.dataset.act === 'del' && confirm(`Supprimer « ${m.name} » du catalogue ? Les ventes déjà enregistrées sont conservées.`)) { state.models = state.models.filter(x => x !== m); save(); renderAll(); }
   if (b.dataset.act === 'stock') {
     const v = prompt(`Stock de « ${m.name} » (nombre de pièces prêtes à vendre) :`, m.stock || 0);
