@@ -48,9 +48,14 @@ Le bénéfice affiché est ce qui reste **après** avoir payé ton temps au taux
 
 ## Données
 
-Tout est enregistré dans le navigateur (`localStorage`, clé `pc3d-v2`). Les données ne sont pas partagées entre deux navigateurs ni entre deux adresses : le fichier ouvert en local et la version GitHub Pages ont chacun leurs propres données. Réglages › Exporter / Importer permet de sauvegarder les données ou de les déplacer.
+**Version en ligne (https://printcost3d-gamma.vercel.app)** : compte unique, données enregistrées dans une base Neon et synchronisées entre appareils. Fonctions serveur dans `api/` (Vercel) :
+- `api/auth.js` : création du compte avec le code `SETUP_CODE` (une seule fois), connexion, déconnexion ;
+- `api/state.js` : document unique versionné ; en cas de modification simultanée, l'appareil fusionne (corbeille pour les suppressions) puis renvoie ;
+- `api/bambu.js` : compte Bambu Lab en lecture seule (accès cloud non officiel) : imprimantes, AMS, historique. Le mot de passe Bambu n'est jamais enregistré, le jeton est chiffré (`BAMBU_KEY`).
 
-À la première ouverture, les réglages de la V1 (électricité, marge, risque, maintenance, prix et puissance des imprimantes) sont repris s'ils existent dans le même navigateur.
+Variables Vercel : `DATABASE_URL` (Neon), `SESSION_SECRET`, `BAMBU_KEY`, `SETUP_CODE`.
+
+**Sans serveur** (GitHub Pages, fichier ouvert en local) : tout reste dans le navigateur (`localStorage`, clé `pc3d-v2`), comme avant. Réglages › Exporter / Importer pour déplacer les données.
 
 ## Installer sur le téléphone
 

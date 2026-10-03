@@ -1920,7 +1920,7 @@ async function cloudInit() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !isDirty()) cloudPull(); });
   setInterval(() => { if (!document.hidden && !isDirty()) cloudPull(); }, 60000);
 }
-const ONLINE_URL = 'https://printcost3d.vercel.app';
+const ONLINE_URL = 'https://printcost3d-gamma.vercel.app';
 function showMoved() {
   if (!location.hostname.endsWith('github.io')) return;
   $('movedBanner').hidden = false;
