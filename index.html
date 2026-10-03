@@ -40,6 +40,7 @@
   --shadow:0 1px 2px #0006,0 10px 30px #0005;--glow1:#6c4cff2e;--glow2:#ff5c9322;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;min-height:100vh;color:var(--ink);background:
   radial-gradient(900px 420px at 0% -8%,var(--glow1),transparent 62%),
@@ -889,7 +890,7 @@ function blankFil() {
 }
 function filFromFile(f) {
   const sp = matchSpool(f);
-  return {spoolId: sp?.id || '', material: f.material, color: f.color, grams: Math.round(f.grams * 100) / 100, pricePerKg: sp ? spoolPerKg(sp) : state.settings.defaultFilamentPrice};
+  return {spoolId: sp?.id || '', material: f.material, color: f.color, grams: Math.round(f.grams * 100) / 100, pricePerKg: sp ? spoolPerKg(sp) : state.settings.defaultFilamentPrice, fromFile: true};
 }
 const spoolLabel = s => `${s.material}${s.colorName ? ' · ' + s.colorName : ''}${s.brand ? ' · ' + s.brand : ''} (${gr(s.remaining)} · ${eur(spoolPerKg(s))}/kg)`;
 
@@ -912,7 +913,7 @@ function renderFils() {
     const sp = l.spoolId && spoolById(l.spoolId), color = sp ? sp.color : l.color;
     return `<div class="filRow" data-i="${i}">
       <span class="swatch" style="background:${esc(color)}" title="${esc(l.material)}"></span>
-      <label>Bobine${!sp && l.material ? ` <small style="display:inline">(fichier : ${esc(l.material)})</small>` : ''}<select data-k="spoolId">${opts(l.spoolId)}</select></label>
+      <label>Bobine${!sp && l.fromFile ? ` <small style="display:inline">(fichier : ${esc(l.material)})</small>` : ''}<select data-k="spoolId">${opts(l.spoolId)}</select></label>
       <label>Grammes<input data-k="grams" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.grams)}" placeholder="0"></label>
       <button class="iconBtn" data-del="${i}" title="Retirer" aria-label="Retirer ce filament">✕</button>
       ${sp ? '' : `<div class="manual"><label>Matière<input data-k="material" value="${esc(l.material)}"></label><label>Prix (€/kg)<input data-k="pricePerKg" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.pricePerKg)}"></label></div>`}
