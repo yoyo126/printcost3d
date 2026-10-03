@@ -4,7 +4,7 @@ import { requireAuth } from './_lib.js';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128 Safari/537.36';
 
-const BH = {'User-Agent': 'bambu_network_agent/01.09.05.01', 'X-BBL-Client-Type': 'slicer', 'X-BBL-Client-Name': 'BambuStudio', 'X-BBL-Language': 'fr-FR', Accept: 'application/json'};
+const BH = {'User-Agent': 'bambu_network_agent/01.09.05.01', 'X-BBL-Client-Type': 'slicer', 'X-BBL-Client-Name': 'BambuStudio', 'X-BBL-Language': 'fr', 'Accept-Language': 'fr', Accept: 'application/json'};
 const text = h => String(h || '').replace(/<br\s*\/?>|<\/(p|h\d|li|div)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
 
 // Recherche MakerWorld (même moteur que l'appli Bambu)
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
   if (!id) return res.status(400).json({error: 'Lien MakerWorld invalide.'});
   try {
     // Même données via l'API Bambu (utilisée par Bambu Studio) : pas de protection anti-robots ; MakerWorld en secours
-    let r = await fetch(`https://api.bambulab.com/v1/design-service/design/${id}`, {headers: {'User-Agent': 'bambu_network_agent/01.09.05.01', 'X-BBL-Client-Type': 'slicer', 'X-BBL-Client-Name': 'BambuStudio', 'X-BBL-Language': 'fr-FR', Accept: 'application/json'}});
+    let r = await fetch(`https://api.bambulab.com/v1/design-service/design/${id}`, {headers: {'User-Agent': 'bambu_network_agent/01.09.05.01', 'X-BBL-Client-Type': 'slicer', 'X-BBL-Client-Name': 'BambuStudio', 'X-BBL-Language': 'fr', 'Accept-Language': 'fr', Accept: 'application/json'}});
     if (!r.ok && r.status !== 404) r = await fetch(`https://makerworld.com/api/v1/design-service/design/${id}`, {headers: {'User-Agent': UA, Accept: 'application/json'}});
     if (r.status === 404) return res.status(404).json({error: 'Modèle introuvable sur MakerWorld.'});
     if (!r.ok) return res.status(502).json({error: `MakerWorld ne répond pas (code ${r.status}).`});
