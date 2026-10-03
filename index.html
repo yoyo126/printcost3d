@@ -150,6 +150,15 @@ body.dragging .dropOverlay{display:grid}
 .dot{width:12px;height:12px;border-radius:50%;display:inline-block;box-shadow:0 0 0 1.5px var(--line);vertical-align:-1px;margin-right:2px}
 .iconBtn{border:0;background:none;color:var(--muted);font-size:18px;padding:8px 6px;margin-bottom:3px;border-radius:10px}
 .iconBtn:hover{color:var(--bad);background:var(--bad-soft)}
+.filStat{grid-column:2/-1;font-size:12.5px;font-weight:600;color:var(--muted);margin-top:-2px}
+.filStat.bad{color:var(--bad)}
+.filStat.warn{color:var(--warn)}
+.asmToggle{gap:12px;cursor:pointer}
+.asmToggle b{display:block;font-family:var(--display);font-size:17px}
+.asmToggle small{display:block;color:var(--muted);font-weight:400;font-size:12.5px;margin-top:2px}
+.drop.mini{padding:12px 14px;margin:14px 0 10px;border-radius:16px;gap:12px}
+.drop.mini>span{font-size:26px}
+.drop.mini strong{font-size:15px}
 details.fold summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer}
 details.fold summary::-webkit-details-marker{display:none}
 details.fold summary b{display:block;font-family:var(--display);font-size:17px}
@@ -369,6 +378,23 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
           </div>
           <p class="hint" id="laborHint"></p>
         </details>
+
+        <div class="card" id="asmCard">
+          <label class="check asmToggle"><input type="checkbox" id="aOn"><span class="badgeIcon">🔧</span><span><b>+ Montage</b><small id="asmSum">Coche si le produit est à assembler : seul ton temps est ajouté.</small></span></label>
+          <div id="asmBody" hidden>
+            <div class="drop mini"><input id="aFile" type="file" multiple aria-label="Ajouter la notice de montage"><span>📄</span><div><strong>Ajouter la notice</strong><p class="hint">PDF, texte ou photos : les étapes et le matériel sont comptés automatiquement.</p></div></div>
+            <div id="aInfo" class="notice" hidden></div>
+            <div class="grid3">
+              <label>Étapes<input id="aSteps" type="number" min="0" step="any" inputmode="numeric" placeholder="0"></label>
+              <label>Vis / écrous<input id="aScrews" type="number" min="0" step="any" inputmode="numeric" placeholder="0"></label>
+              <label>Inserts à chaud<input id="aInserts" type="number" min="0" step="any" inputmode="numeric" placeholder="0"></label>
+              <label>Aimants<input id="aMagnets" type="number" min="0" step="any" inputmode="numeric" placeholder="0"></label>
+              <label class="check" style="align-self:end;padding-bottom:12px"><input type="checkbox" id="aGlue"> Collage</label>
+              <label>Fournitures (€ / produit)<input id="aSupplies" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+            </div>
+            <label style="margin-top:12px">Temps de montage retenu (min / produit)<input id="aMinutes" type="number" min="0" step="any" inputmode="numeric"><small id="aEstHint"></small></label>
+          </div>
+        </div>
       </div>
 
       <aside class="calcSide" id="calcSide">
@@ -439,6 +465,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <label>Risque d'échec (%)<input name="risk" type="number" min="0" step="any"><small>Ajouté au coût matière + machine pour couvrir les ratés.</small></label>
     <label>Filament sans bobine (€/kg)<input name="defaultFilamentPrice" type="number" min="0" step="any"><small>Prix utilisé quand aucune bobine du stock n'est choisie.</small></label>
     <label>Alerte bobine faible (g)<input name="lowStock" type="number" min="0" step="any"></label>
+    <label>Marge de sécurité filament (g)<input name="safetyGrams" type="number" min="0" step="any"><small>L'outil prévient s'il ne resterait pas au moins cette quantité après l'impression.</small></label>
   </div>
   <h3>Ton temps</h3>
   <div class="grid3">
@@ -572,7 +599,7 @@ function confetti() {
 function defaultState() {
   return {
     version: 2,
-    settings: {electricity:.25, maintenance:.10, lifeHours:5000, risk:7, defaultFilamentPrice:20, lowStock:150,
+    settings: {electricity:.25, maintenance:.10, lifeHours:5000, risk:7, defaultFilamentPrice:20, lowStock:150, safetyGrams:15,
       laborRate:15, prepMin:5, finishMin:2, packaging:.30, margin:100, minimumPrice:2, rounding:'0.90', monthlyGoal:0, estFlow:35, printerMode:'fixed', defaultPrinter:'h2d'},
     printers: [
       {id:'p2s', name:'Bambu Lab P2S + 2 AMS', price:1000, power:120},
@@ -635,10 +662,11 @@ function computeCost(j) {
   const risk = (material + power + machine + maint) * s.risk / 100;
   const labor = (num(j.prepMin) + num(j.finishMin) * pcs) / 60 * s.laborRate;
   const pack = num(j.packaging) * pcs;
-  const total = material + power + machine + maint + risk + labor + pack;
+  const asmMin = asmMinutes(j.asm), assembly = asmMin * pcs / 60 * s.laborRate, supplies = j.asm?.on ? num(j.asm.supplies) * pcs : 0;
+  const total = material + power + machine + maint + risk + labor + pack + assembly + supplies;
   const unit = total / pcs;
   const suggested = roundPrice(Math.max(s.minimumPrice, unit * (1 + s.margin / 100)));
-  return {h, pcs, grams, material, power, machine, maint, risk, labor, pack, total, unit, suggested};
+  return {h, pcs, grams, material, power, machine, maint, risk, labor, pack, asmMin, assembly, supplies, total, unit, suggested};
 }
 const modelPrice = (m, c = computeCost(m)) => (m.price !== '' && m.price != null) ? num(m.price) : c.suggested;
 const channelFees = (ch, amount) => amount > 0 && ch ? amount * ch.pct / 100 + num(ch.fixed) : 0;
@@ -920,12 +948,149 @@ function spoolSvg(color, ratio) {
 }
 const emptyState = (emoji, title, text) => `<div class="card empty"><span class="big">${emoji}</span><b>${title}</b>${text}</div>`;
 
+/* ---------- Filament suffisant ? ---------- */
+function spoolNeeds(fils, n = 1) {
+  const need = {};
+  for (const l of fils) if (l.spoolId && num(l.grams) > 0) need[l.spoolId] = (need[l.spoolId] || 0) + num(l.grams) * n;
+  return need;
+}
+function shortages(fils, n = 1) {
+  const m = num(state.settings.safetyGrams);
+  return Object.entries(spoolNeeds(fils, n)).map(([id, need]) => ({s: spoolById(id), need})).filter(x => x.s && x.need + m > x.s.remaining);
+}
+function altSpool(s, need) {
+  const m = num(state.settings.safetyGrams);
+  return state.spools.filter(x => x !== s && x.remaining >= need + m && matOk(x.material, s.material) && colorDist(x.color, s.color) < 90)
+    .sort((a, b) => colorDist(a.color, s.color) - colorDist(b.color, s.color))[0];
+}
+function updateFilStats() {
+  const need = spoolNeeds(job.filaments), m = num(state.settings.safetyGrams);
+  document.querySelectorAll('#jFils [data-stat]').forEach(el => {
+    const l = job.filaments[+el.dataset.stat], s = l && spoolById(l.spoolId), g = s ? need[s.id] : 0;
+    el.className = 'filStat';
+    if (!s || !g) { el.textContent = ''; return; }
+    const left = s.remaining - g;
+    if (left < 0 || left < m) {
+      const alt = altSpool(s, g);
+      el.classList.add(left < 0 ? 'bad' : 'warn');
+      el.innerHTML = (left < 0 ? `❌ Il faut ${gr(g)}, il reste ${gr(s.remaining)} : il manque ${gr(-left)}.` : `⚠️ Juste : il ne resterait que ${gr(left)} sur la bobine.`)
+        + (alt ? ` <button class="link" data-alt="${el.dataset.stat}" data-sp="${esc(alt.id)}">Prendre ${esc(spoolLabel(alt).replace(/ \(.*/, ''))} (${gr(alt.remaining)})</button>` : '');
+    } else el.textContent = `✓ Il restera ${gr(left)} sur la bobine.`;
+  });
+}
+
+/* ---------- Montage ---------- */
+const ASM = {base: 3, step: 1.5, screw: 0.4, insert: 1, magnet: 0.5, glue: 5};
+const defaultAsm = () => ({on: false, steps: '', screws: '', inserts: '', magnets: '', glue: false, supplies: '', minutes: '', notice: ''});
+const asmEstimate = a => a ? ASM.base + num(a.steps) * ASM.step + num(a.screws) * ASM.screw + num(a.inserts) * ASM.insert + num(a.magnets) * ASM.magnet + (a.glue ? ASM.glue : 0) : 0;
+const asmMinutes = a => a?.on ? (a.minutes !== '' && a.minutes != null ? num(a.minutes) : asmEstimate(a)) : 0;
+const fr = n => (+n).toLocaleString('fr-FR', {maximumFractionDigits: 1});
+function asmDetail(a) {
+  const parts = [`${ASM.base} min de mise en place`];
+  if (num(a.steps)) parts.push(`${fr(a.steps)} étape${num(a.steps) > 1 ? 's' : ''} × ${fr(ASM.step)}`);
+  if (num(a.screws)) parts.push(`${fr(a.screws)} vis/écrous × ${fr(ASM.screw)}`);
+  if (num(a.inserts)) parts.push(`${fr(a.inserts)} insert${num(a.inserts) > 1 ? 's' : ''} × ${fr(ASM.insert)}`);
+  if (num(a.magnets)) parts.push(`${fr(a.magnets)} aimant${num(a.magnets) > 1 ? 's' : ''} × ${fr(ASM.magnet)}`);
+  if (a.glue) parts.push(`collage ${ASM.glue} min`);
+  return parts.join(' + ');
+}
+const ASM_FIELDS = [['aSteps', 'steps'], ['aScrews', 'screws'], ['aInserts', 'inserts'], ['aMagnets', 'magnets'], ['aSupplies', 'supplies'], ['aMinutes', 'minutes']];
+function fillAsmInputs() {
+  const a = job.asm ||= defaultAsm();
+  $('aOn').checked = a.on; $('aGlue').checked = !!a.glue;
+  ASM_FIELDS.forEach(([id, k]) => $(id).value = a[k] ?? '');
+  if (!a.notice) $('aInfo').hidden = true;
+}
+function updateAsmTexts(c) {
+  const a = job.asm ||= defaultAsm();
+  $('asmBody').hidden = !a.on;
+  $('aMinutes').placeholder = `${Math.round(asmEstimate(a))} (estimation)`;
+  $('aEstHint').textContent = `Estimation : ${Math.round(asmEstimate(a))} min (${asmDetail(a)}). Laisse vide pour la garder, ou mets ton vrai temps.`;
+  $('asmSum').textContent = a.on
+    ? `${Math.round(c.asmMin)} min × ${eur(state.settings.laborRate)}/h = ${eur(c.assembly / c.pcs)} par produit${num(a.supplies) ? ` + ${eur(num(a.supplies))} de fournitures` : ''}`
+    : 'Coche si le produit est à assembler : seul ton temps est ajouté.';
+}
+// Notice : lecture du texte (PDF, txt) puis comptage des étapes et du matériel
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/';
+async function readNotice(files) {
+  let text = '', pages = 0, images = 0;
+  for (const f of files) {
+    const low = f.name.toLowerCase();
+    if (low.endsWith('.pdf') || f.type === 'application/pdf') {
+      const pdfjs = await import(PDFJS + 'pdf.min.mjs');
+      pdfjs.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.mjs';
+      const doc = await pdfjs.getDocument({data: new Uint8Array(await f.arrayBuffer())}).promise;
+      pages += doc.numPages;
+      for (let i = 1; i <= doc.numPages; i++) {
+        const items = (await (await doc.getPage(i)).getTextContent()).items;
+        let lastY = null, line = '';
+        for (const it of items) {
+          const y = Math.round(it.transform[5]);
+          if (lastY !== null && Math.abs(y - lastY) > 2) { text += line + '\n'; line = ''; }
+          line += it.str + ' '; lastY = y;
+        }
+        text += line + '\n';
+      }
+    } else if (f.type.startsWith('image/') || /\.(jpe?g|png|heic|webp|gif)$/.test(low)) images++;
+    else text += (await f.text()) + '\n';
+  }
+  return {text, pages, images};
+}
+function analyseNotice(n) {
+  const t = n.text.replace(/ /g, ' '), lines = t.split('\n');
+  let steps = 0;
+  for (const m of t.matchAll(/\b(?:étape|etape|step|stage|schritt)\s*(?:n[°o]\s*)?(\d{1,3})\b/gi)) steps = Math.max(steps, +m[1]);
+  if (!steps) steps = lines.filter(l => /^\s*\d{1,2}\s*[.)-]\s+\S/.test(l)).length;
+  const textless = t.replace(/\s/g, '').length < 40;
+  if (!steps && textless) steps = n.images || n.pages;
+  const cats = [
+    ['inserts', /\b(inserts?|heat[- ]?set)\b/i],
+    ['magnets', /\b(aimants?|magnets?)\b/i],
+    ['screws', /\b(vis|screws?|boulons?|bolts?|écrous?|ecrous?|nuts?)\b|\bM[2-8](?=[x×\s.,]|$)/i],
+  ];
+  const cnt = {screws: 0, inserts: 0, magnets: 0};
+  for (const raw of lines) {
+    const l = raw.replace(/\bM\d+(?:[.,]\d+)?\s*[x×]\s*\d+(?:[.,]\d+)?\s*(?:mm)?/gi, ' MSPEC ');
+    const q = l.match(/(?:^|\s)(\d{1,3})\s*[x×](?=\s|$)|(?:^|\s)[x×]\s*(\d{1,3})\b|\b(\d{1,3})\s*(?:pcs|pc|pièces?|pieces?|units?)\b|(?:qté|qty|quantité|quantity)\s*:?\s*(\d{1,3})/i);
+    if (!q) continue;
+    const qty = +(q[1] || q[2] || q[3] || q[4]);
+    const cat = cats.find(([, re]) => re.test(raw));
+    if (cat) cnt[cat[0]] += qty;
+  }
+  const glue = /\b(colle|coller|collage|collez|glue|cyano|super ?glue|époxy|epoxy|araldite)\b/i.test(t);
+  return {steps, ...cnt, glue, textless};
+}
+async function importNotice(files) {
+  if (!files.length) return;
+  const a = job.asm ||= defaultAsm();
+  a.on = true;
+  $('aInfo').hidden = false; $('aInfo').className = 'notice'; $('aInfo').textContent = '⏳ Lecture de la notice…';
+  fillAsmInputs(); updateResult();
+  try {
+    const n = await readNotice(files), r = analyseNotice(n);
+    Object.assign(a, {steps: r.steps || '', screws: r.screws || '', inserts: r.inserts || '', magnets: r.magnets || '', glue: r.glue, minutes: '', notice: files.map(f => f.name).join(', ')});
+    const found = [r.steps && `${r.steps} étape${r.steps > 1 ? 's' : ''}`, r.screws && `${r.screws} vis/écrous`, r.inserts && `${r.inserts} insert${r.inserts > 1 ? 's' : ''}`,
+      r.magnets && `${r.magnets} aimant${r.magnets > 1 ? 's' : ''}`, r.glue && 'collage'].filter(Boolean);
+    $('aInfo').hidden = false; $('aInfo').className = 'notice' + (r.textless || !found.length ? ' warn' : '');
+    $('aInfo').innerHTML = `📄 <b>${esc(a.notice)}</b>${n.pages ? ` (${n.pages} page${n.pages > 1 ? 's' : ''})` : ''} : ${found.length ? found.join(', ') : 'rien de reconnu'}.`
+      + (r.textless ? '<br>Notice sans texte lisible (images) : 1 étape comptée par page ou photo. Corrige les chiffres si besoin.' : '<br>Vérifie les chiffres ci-dessous et corrige si besoin.');
+    fillAsmInputs(); updateResult();
+  } catch (e) {
+    console.error(e);
+    $('aInfo').className = 'notice warn'; $('aInfo').textContent = 'Impossible de lire cette notice (le lecteur PDF a besoin d’une connexion internet). Remplis les chiffres à la main.';
+  }
+}
+$('aFile').onchange = e => { importNotice([...e.target.files]); e.target.value = ''; };
+$('aOn').onchange = () => { (job.asm ||= defaultAsm()).on = $('aOn').checked; updateResult(); };
+$('aGlue').onchange = () => { job.asm.glue = $('aGlue').checked; updateResult(); };
+ASM_FIELDS.forEach(([id, k]) => $(id).addEventListener('input', () => { job.asm[k] = $(id).value; updateResult(); }));
+
 /* ---------- Écran Calcul ---------- */
 let job, loadedPlates = [], est = null, autoName = '', resultOk = false, lastObjs = 0, fileCfg = null;
 function newJob() {
   const s = state.settings;
   return {id:null, name:'', printerId: defaultPrinterId(), hours:'', minutes:'', pieces:1,
-    filaments:[blankFil()], prepMin:s.prepMin, finishMin:s.finishMin, packaging:s.packaging, price:'', thumb:null, estimated:false};
+    filaments:[blankFil()], prepMin:s.prepMin, finishMin:s.finishMin, packaging:s.packaging, price:'', thumb:null, estimated:false, asm: defaultAsm()};
 }
 function blankFil() {
   const sp = state.spools.find(s => s.remaining > 0);
@@ -949,7 +1114,7 @@ function renderCalc() {
   $('saveModel').textContent = label; $('sumSave').textContent = job.id ? 'Mettre à jour' : 'Ajouter';
   $('editBanner').hidden = !job.id;
   if (job.id) $('editBanner').innerHTML = `✏️ Modification de <b>${esc(job.name)}</b> du catalogue. <button class="link" id="cancelEdit">Annuler</button>`;
-  renderFils(); updateResult();
+  fillAsmInputs(); renderFils(); updateResult();
 }
 function renderFils() {
   const opts = sel => `<option value="">— Sans bobine du stock</option>` + state.spools.filter(s => s.remaining > 0 || s.id === sel)
@@ -961,6 +1126,7 @@ function renderFils() {
       <label>Bobine${!sp && l.fromFile ? ` <small style="display:inline">(fichier : ${esc(l.material)})</small>` : ''}<select data-k="spoolId">${opts(l.spoolId)}</select></label>
       <label>Grammes<input data-k="grams" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.grams)}" placeholder="0"></label>
       <button class="iconBtn" data-del="${i}" title="Retirer" aria-label="Retirer ce filament">✕</button>
+      <div class="filStat" data-stat="${i}"></div>
       ${sp ? '' : `<div class="manual"><label>Matière<input data-k="material" value="${esc(l.material)}"></label><label>Prix (€/kg)<input data-k="pricePerKg" type="number" min="0" step="any" inputmode="decimal" value="${esc(l.pricePerKg)}"></label></div>`}
     </div>`;
   }).join('') || '<p class="hint">Aucun filament.</p>';
@@ -977,6 +1143,8 @@ $('jFils').addEventListener('change', e => {
   renderFils(); updateResult();
 });
 $('jFils').addEventListener('click', e => {
+  const alt = e.target.closest('[data-alt]');
+  if (alt) { const l = job.filaments[+alt.dataset.alt], sp = spoolById(alt.dataset.sp); Object.assign(l, {spoolId: sp.id, material: sp.material, color: sp.color, pricePerKg: spoolPerKg(sp)}); renderFils(); updateResult(); return; }
   const d = e.target.closest('[data-del]'); if (!d) return;
   job.filaments.splice(+d.dataset.del, 1); renderFils(); updateResult();
 });
@@ -996,6 +1164,7 @@ function updateResult() {
   const work = (num(job.prepMin) + num(job.finishMin) * c.pcs) / 60;
   $('laborHint').textContent = `${dur(work)} de travail × ${eur(s.laborRate)}/h = ${eur(c.labor)} pour le plateau.`;
   $('laborSum').textContent = `${num(job.prepMin)} min de préparation · ${num(job.finishMin)} min/pièce · ${eur(num(job.packaging))} d'emballage`;
+  updateFilStats(); updateAsmTexts(c);
   resultOk = c.h > 0 && c.grams > 0;
   $('saveModel').disabled = $('sumSave').disabled = !resultOk;
   if (!resultOk) {
@@ -1006,7 +1175,8 @@ function updateResult() {
   const price = modelPrice(job, c), fixed = job.price !== '' && job.price != null;
   const profit = price - c.unit, rate = price > 0 ? profit / price * 100 : 0;
   const parts = [[`Filament · ${gr(c.grams / c.pcs)}`, c.material], [`Électricité · ${dur(c.h / c.pcs)}`, c.power], ['Amortissement machine', c.machine],
-    ['Maintenance', c.maint], [`Risque d'échec · ${pct(s.risk)}`, c.risk], ['Ton temps', c.labor], ['Emballage', c.pack]].map(([l, v]) => [l, v / c.pcs]);
+    ['Maintenance', c.maint], [`Risque d'échec · ${pct(s.risk)}`, c.risk], ['Ton temps', c.labor], ['Emballage', c.pack],
+    ...(job.asm?.on ? [[`Montage · ${Math.round(c.asmMin)} min`, c.assembly], ['Fournitures', c.supplies]] : [])].map(([l, v]) => [l, v / c.pcs]);
   const maxPart = Math.max(...parts.map(p => p[1]), 0.0001);
   const chRows = state.channels.map(ch => {
     const p = channelPrice(ch, price), net = p - channelFees(ch, p);
@@ -1065,8 +1235,9 @@ function setInfo(html, kind) { const i = $('fileInfo'); i.hidden = false; i.clas
 async function handleFile(file) {
   if (!file) return;
   const lower = file.name.toLowerCase();
+  if (/\.(pdf|txt|md|png|jpe?g|webp|heic)$/.test(lower)) { importNotice([file]); $('asmCard').scrollIntoView({behavior: 'smooth', block: 'start'}); return; }
   $('plateBox').hidden = true; $('estBox').hidden = true; loadedPlates = []; est = null; lastObjs = 0; fileCfg = null;
-  if (!/\.(3mf|stl)$/.test(lower)) { setInfo(`${esc(file.name)} : format non reconnu. Choisis un fichier .3mf ou .stl.`, 'err'); return; }
+  if (!/\.(3mf|stl)$/.test(lower)) { setInfo(`${esc(file.name)} : format non reconnu. Choisis un fichier .3mf ou .stl (ou une notice PDF pour le montage).`, 'err'); return; }
   setInfo('⏳ Lecture du fichier…');
   const base = file.name.replace(/\.gcode\.3mf$/i, '').replace(/\.(3mf|stl)$/i, '');
   if (!job.name || job.name === autoName) { job.name = base; autoName = base; }
@@ -1200,7 +1371,9 @@ function renderCatalog() {
         <div class="priceTag"><b>${eur(p)}</b><span class="meta">coût ${eur(c.unit)} · <span class="${p - c.unit >= 0 ? 'pos' : 'neg'}">+${eur(p - c.unit)}</span></span></div>
         <div><span class="pill ${m.stock > 0 ? 'ok' : m.stock < 0 ? 'bad' : ''}">${m.stock || 0} en stock</span>
           ${m.estimated ? '<span class="pill brand">≈ estimé</span>' : ''}
-          ${missing ? '<span class="pill warn">bobine supprimée</span>' : ''}</div>
+          ${missing ? '<span class="pill warn">bobine supprimée</span>' : ''}
+          ${shortages(m.filaments).length ? '<span class="pill bad">filament insuffisant</span>' : ''}
+          ${m.asm?.on ? `<span class="pill brand">🔧 montage ${Math.round(asmMinutes(m.asm))} min</span>` : ''}</div>
         <div class="actions">
           <button class="btn small" data-act="print" data-id="${m.id}">🖨️ Imprimer</button>
           <button class="btn small" data-act="sell" data-id="${m.id}">💸 Vendre</button>
@@ -1253,7 +1426,10 @@ function updatePrintPreview() {
     const left = s.remaining - u.grams;
     return `<span class="dot" style="background:${esc(s.color)}"></span> ${gr(u.grams)} sur ${esc(spoolLabel(s).replace(/ \(.*/, ''))} → reste <b class="${left < 0 ? 'neg' : ''}">${gr(left)}</b>`;
   });
-  $('printPreview').innerHTML = `${lines.join('<br>')}<br>${f.failed.checked ? 'Aucune pièce ajoutée au stock.' : `<b>+${c.pcs * n} pièce${c.pcs * n > 1 ? 's' : ''}</b> en stock · ${dur(c.h * n)} de machine`}`;
+  const short = shortages(m.filaments, n);
+  $('printPreview').className = 'notice' + (short.length ? ' warn' : '');
+  $('printPreview').innerHTML = (short.length ? `<b>❌ Filament insuffisant : ${short.map(x => `${esc(x.s.material)}${x.s.colorName ? ' ' + esc(x.s.colorName) : ''} (il faut ${gr(x.need)}, il reste ${gr(x.s.remaining)})`).join(', ')}.</b><br>` : '')
+    + `${lines.join('<br>')}<br>${f.failed.checked ? 'Aucune pièce ajoutée au stock.' : `<b>+${c.pcs * n} pièce${c.pcs * n > 1 ? 's' : ''}</b> en stock · ${dur(c.h * n)} de machine`}`;
 }
 $('fPrint').addEventListener('input', updatePrintPreview);
 $('fPrint').addEventListener('submit', e => {
