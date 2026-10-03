@@ -258,7 +258,16 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .pill.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 .pill.brand{background:var(--brand-soft);color:var(--brand-ink);border-color:transparent}
 .spool{width:76px;height:76px}
-.subList{margin-top:10px;display:grid;gap:8px}
+.spoolGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.grp{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:start;cursor:pointer;min-width:0}
+.grp:hover{border-color:var(--brand)}
+.grp.open{grid-column:1/-1;border-color:var(--brand)}
+.grp .spool{width:40px;height:40px}
+.grp h4{margin:0;font-size:13.5px;line-height:1.25;font-family:var(--display);font-weight:700;overflow-wrap:anywhere}
+.grp .meta{font-size:11.5px;color:var(--muted);line-height:1.4}
+.grp .kg{font-family:var(--display);font-weight:800;font-size:17px;margin:3px 0 1px}
+.grp .pill{font-size:11px;padding:1px 7px}
+.subList{margin-top:10px;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
 .sub{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:13px}
 .sub:hover{border-color:var(--brand)}
 .subTop{display:flex;justify-content:space-between;gap:8px;font-weight:600}
@@ -405,6 +414,9 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   dialog form{padding:18px 16px}
   dialog{width:calc(100vw - 20px)}
   .items{grid-template-columns:1fr}
+  .spoolGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grp{grid-template-columns:30px 1fr;gap:8px;padding:9px}
+  .grp .spool{width:30px;height:30px}
   .estGrid{grid-template-columns:110px 1fr}
   #preview{width:110px;height:110px}
   .drop{padding:16px}
@@ -573,7 +585,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <div id="secStock">
       <div class="toolbar"><span class="hint" id="spoolSummary" style="margin:0"></span><button class="btn primary" id="newSpool">＋ Ajouter une bobine</button></div>
       <div class="search" style="max-width:none;margin-bottom:12px"><input id="spoolSearch" type="search" placeholder="Rechercher une couleur, une référence, un emplacement…"></div>
-      <div id="spoolList" class="items"></div>
+      <div id="spoolList" class="spoolGrid"></div>
       <label class="check" style="margin-top:14px"><input type="checkbox" id="showEmpty"> Afficher les bobines vides</label>
     </div>
   </section>
@@ -691,6 +703,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <small class="hint" id="trackInfo">Le restant se calcule avec les grammes de chaque impression faite depuis cet emplacement (historique Bambu).</small>
   </div>
   <label id="spoolCountWrap" style="margin-top:12px">Nombre de bobines identiques<input name="count" type="number" min="1" step="1" value="1" inputmode="numeric"><small>Pour un lot : crée autant de bobines que nécessaire.</small></label>
+  <button class="btn" type="button" id="dupSpool" style="margin-top:12px;width:100%">＋ J'ai racheté cette bobine (ajouter des neuves identiques)</button>
   <div class="dFoot"><button class="btn danger" type="button" id="delSpool">Supprimer</button><span style="flex:1"></span><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Enregistrer</button></div>
 </form></dialog>
 
@@ -1978,13 +1991,12 @@ function renderSpools() {
   $('spoolList').innerHTML = sorted.map(([k, sps]) => {
     const s = sps[0], total = sps.reduce((a, x) => a + Math.max(0, x.remaining), 0), cap = sps.reduce((a, x) => a + x.weight, 0);
     const inMachine = sps.filter(x => x.amsWhere), reserve = sps.length - inMachine.length, isLow = total < low, open = openGroups.has(k);
-    return `<div class="item grp${open ? ' open' : ''}" data-grp="${esc(k)}" style="cursor:pointer">
+    return `<div class="grp${open ? ' open' : ''}" data-grp="${esc(k)}">
       ${spoolSvg(s.color, cap ? total / cap : 0)}
-      <div style="min-width:0"><h4>${esc(s.material)}${s.colorName ? ' · ' + esc(s.colorName) : ''}${sps.length > 1 ? ` <span class="pill brand">×${sps.length}</span>` : ''}</h4>
-        <div class="meta">${esc(s.brand || 'Marque ?')}${s.ref ? ' · réf. ' + esc(s.ref) : ''} · ${eur(spoolPerKg(s))}/kg</div>
-        <div class="priceTag"><b class="${isLow ? 'neg' : ''}">${total >= 1000 ? kgTxt(total) : gr(total)}</b><span class="meta">${sps.length > 1 ? 'au total' : 'restants'}</span> ${total <= 0 ? '<span class="pill">vide</span>' : isLow ? '<span class="pill bad">bientôt vide</span>' : ''}</div>
-        <div class="meta">${inMachine.map(x => `📍 ${esc(x.amsWhere)} (${gr(x.remaining)})`).join(' · ')}${inMachine.length && reserve ? ' · ' : ''}${reserve ? `📦 ${reserve} en réserve` : ''}</div>
-        <div class="actions"><button class="btn small" data-plus="${esc(s.id)}">＋1 identique</button>${sps.length > 1 ? `<button class="btn small" data-toggle>${open ? 'Masquer' : 'Voir'} les ${sps.length} bobines</button>` : ''}</div>
+      <div style="min-width:0"><h4>${esc(s.material)}${s.colorName ? ' · ' + esc(s.colorName) : ''}</h4>
+        <div class="meta">${esc(s.brand || 'Marque ?')}${s.ref ? ' · ' + esc(s.ref) : ''}</div>
+        <div class="kg ${isLow ? 'neg' : ''}">${total >= 1000 ? kgTxt(total) : gr(total)}</div>
+        <div class="meta">${sps.length > 1 ? `<span class="pill brand">${sps.length} bobines</span> ` : ''}${inMachine.map(x => { const [pr, sl] = x.amsWhere.split(' · '); return `📍${esc(pr.split(' ').pop())} ${esc(sl || '')}`; }).join(' ')}${reserve ? ` 📦${reserve > 1 ? reserve : ''}` : ''}${total <= 0 ? ' <span class="pill">vide</span>' : isLow ? ' <span class="pill bad">bientôt vide</span>' : ''}</div>
         ${open && sps.length > 1 ? `<div class="subList">${sps.map(x => spoolRow(x, low)).join('')}</div>` : ''}
       </div></div>`;
   }).join('') || (q ? emptyState('🔍', 'Aucune bobine trouvée', 'Essaie une autre couleur ou référence.') : emptyState('🧵', 'Aucune bobine', 'Ajoute tes bobines : le coût utilisera ton vrai prix d’achat et le stock se mettra à jour à chaque impression.'));
@@ -1992,24 +2004,16 @@ function renderSpools() {
 $('showEmpty').onchange = renderSpools;
 $('spoolSearch').addEventListener('input', renderSpools);
 $('spoolList').addEventListener('click', e => {
-  const plus = e.target.closest('[data-plus]');
-  if (plus) {
-    const src = spoolById(plus.dataset.plus); if (!src) return;
-    const {material, brand, ref, colorName, color, price, weight} = src;
-    state.spools.push({id: uid(), material, brand, ref, colorName, color, price, weight, remaining: weight, date: today()});
-    save(); renderSpools(); toast(`🧵 +1 ${material}${colorName ? ' ' + colorName : ''} en réserve`);
-    return;
-  }
   const sub = e.target.closest('[data-spool]'); if (sub) { openSpool(spoolById(sub.dataset.spool)); return; }
   const g = e.target.closest('[data-grp]'); if (!g) return;
   const k = g.dataset.grp, n = state.spools.filter(x => spoolKey(x) === k && ($('showEmpty').checked || x.remaining > 0));
-  if (n.length === 1 && !e.target.closest('[data-toggle]')) { openSpool(n[0]); return; }
+  if (n.length === 1) { openSpool(n[0]); return; }
   openGroups.has(k) ? openGroups.delete(k) : openGroups.add(k); renderSpools();
 });
 $('newSpool').onclick = () => openSpool(null);
 function openSpool(s) {
   editingSpool = s; const f = $('fSpool');
-  $('spoolTitle').textContent = s ? 'Modifier la bobine' : 'Nouvelle bobine 🧵'; $('delSpool').hidden = !s;
+  $('spoolTitle').textContent = s ? 'Modifier la bobine' : 'Nouvelle bobine 🧵'; $('delSpool').hidden = !s; $('dupSpool').hidden = !s;
   const d = s || {material:'PLA Basic', brand:'Bambu Lab', colorName:'', color:'#ffffff', price:'', weight:1000, remaining:1000, date: today()};
   f.material.innerHTML = matOptions(d.material);
   setBrandOptions(d.brand);
@@ -2032,6 +2036,17 @@ function openSpool(s) {
 let spoolOpenVals = {}, pendingTray = null;
 $('fSpool').weight.addEventListener('input', e => { if (!editingSpool) $('fSpool').remaining.value = e.target.value; });
 $('dlgSpool').addEventListener('close', () => { pendingTray = null; });
+$('dupSpool').onclick = () => {
+  const src = editingSpool; if (!src) return;
+  const label = `${src.material}${src.colorName ? ' ' + src.colorName : ''}${src.brand ? ' (' + src.brand + ')' : ''}`;
+  const v = prompt(`Combien de bobines NEUVES identiques ajouter ?\n${label} — ${gr(src.weight)}, ${eur(src.price)} la bobine`, '1');
+  if (v === null) return;
+  const n = parseInt(v);
+  if (!(n >= 1 && n <= 20)) { toast('Indique un nombre entre 1 et 20'); return; }
+  const {material, brand, ref, colorName, color, price, weight} = src;
+  for (let i = 0; i < n; i++) state.spools.push({id: uid(), material, brand, ref, colorName, color, price, weight, remaining: weight, date: today()});
+  save(); $('dlgSpool').close(); renderSpools(); toast(`🧵 ${n} bobine${n > 1 ? 's' : ''} ${label} ajoutée${n > 1 ? 's' : ''} en réserve`);
+};
 $('delSpool').onclick = () => {
   if (!editingSpool) return;
   const used = state.models.filter(m => m.filaments.some(l => l.spoolId === editingSpool.id));
