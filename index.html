@@ -105,7 +105,7 @@ input[type=checkbox]{width:18px;height:18px;margin:0;accent-color:var(--brand)}
 .calcGrid{display:grid;grid-template-columns:minmax(0,1fr);gap:0 18px}
 .calcSide{margin-bottom:96px}
 @media (min-width:1000px){
-  .app{max-width:1180px}
+  .app{max-width:1500px}
   .calcGrid{grid-template-columns:minmax(0,1fr) 420px;align-items:start}
   .calcSide{position:sticky;top:86px;max-height:calc(100vh - 98px);overflow:auto;margin-bottom:0;padding:0 2px 6px;scrollbar-width:thin}
 }
@@ -258,17 +258,17 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .pill.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
 .pill.brand{background:var(--brand-soft);color:var(--brand-ink);border-color:transparent}
 .spool{width:76px;height:76px}
-.spoolGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
-.grp{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:start;cursor:pointer;min-width:0}
+.spoolGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.grp{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;display:grid;grid-template-columns:56px 1fr;gap:14px;align-items:start;cursor:pointer;min-width:0}
 .grp:hover{border-color:var(--brand)}
 .grp.open{grid-column:1/-1;border-color:var(--brand)}
-.grp .spool{width:40px;height:40px}
-.grp h4{margin:0;font-size:13.5px;line-height:1.25;font-family:var(--display);font-weight:700;overflow-wrap:anywhere}
-.grp .meta{font-size:11.5px;color:var(--muted);line-height:1.4}
-.grp .kg{font-family:var(--display);font-weight:800;font-size:17px;margin:3px 0 1px}
-.grp .pill{font-size:11px;padding:1px 7px}
+.grp .spool{width:56px;height:56px}
+.grp h4{margin:0 0 3px;font-size:17px;line-height:1.25;font-family:var(--display);font-weight:700;overflow-wrap:anywhere}
+.grp .meta{font-size:14px;color:var(--muted);line-height:1.5}
+.grp .kg{font-family:var(--display);font-weight:800;font-size:22px;margin:5px 0 2px}
+.grp .pill{font-size:12.5px;padding:2px 9px}
 .subList{margin-top:10px;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
-.sub{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:13px}
+.sub{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14.5px}
 .sub:hover{border-color:var(--brand)}
 .subTop{display:flex;justify-content:space-between;gap:8px;font-weight:600}
 .sub .bar{margin:6px 0 4px}
@@ -415,8 +415,11 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   dialog{width:calc(100vw - 20px)}
   .items{grid-template-columns:1fr}
   .spoolGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .grp{grid-template-columns:30px 1fr;gap:8px;padding:9px}
-  .grp .spool{width:30px;height:30px}
+  .grp{grid-template-columns:34px 1fr;gap:9px;padding:11px}
+  .grp .spool{width:34px;height:34px}
+  .grp h4{font-size:15px}
+  .grp .meta{font-size:12.5px}
+  .grp .kg{font-size:19px}
   .estGrid{grid-template-columns:110px 1fr}
   #preview{width:110px;height:110px}
   .drop{padding:16px}
@@ -583,7 +586,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <div id="secAms"><div class="card" id="bambuCard" hidden></div></div>
     <div id="secHist" hidden><div class="card" id="histCard"></div></div>
     <div id="secStock">
-      <div class="toolbar"><span class="hint" id="spoolSummary" style="margin:0"></span><button class="btn primary" id="newSpool">＋ Ajouter une bobine</button></div>
+      <div class="toolbar"><span id="spoolSummary" style="margin:0;font-size:15px;font-weight:600;color:var(--muted)"></span><button class="btn primary" id="newSpool">＋ Ajouter une bobine</button></div>
       <div class="search" style="max-width:none;margin-bottom:12px"><input id="spoolSearch" type="search" placeholder="Rechercher une couleur, une référence, un emplacement…"></div>
       <div id="spoolList" class="spoolGrid"></div>
       <label class="check" style="margin-top:14px"><input type="checkbox" id="showEmpty"> Afficher les bobines vides</label>
@@ -771,6 +774,14 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   <div id="bStep2" hidden><label>Code reçu<input name="code" inputmode="numeric" autocomplete="one-time-code"></label><p class="hint" id="bCodeHint"></p></div>
   <p id="bErr" class="neg" style="font-weight:650;min-height:1.2em"></p>
   <div class="dFoot"><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Continuer</button></div>
+</form></dialog>
+
+<!-- Relier un emplacement sans puce à une bobine du stock -->
+<dialog id="dlgLink"><form method="dialog" id="fLink">
+  <div class="dHead"><h2>Quelle bobine est en <span id="linkWhere"></span> ?</h2><button class="iconBtn" value="cancel" formnovalidate aria-label="Fermer">✕</button></div>
+  <label>Bobine de ta réserve<select id="linkSel"></select></label>
+  <p class="hint">Son restant actuel sert de départ ; ensuite il diminue avec les grammes de chaque impression faite depuis cet emplacement (historique Bambu).</p>
+  <div class="dFoot"><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Relier</button></div>
 </form></dialog>
 
 <!-- Vente groupée depuis l'historique -->
@@ -1993,8 +2004,9 @@ function renderSpools() {
     const inMachine = sps.filter(x => x.amsWhere), reserve = sps.length - inMachine.length, isLow = total < low, open = openGroups.has(k);
     return `<div class="grp${open ? ' open' : ''}" data-grp="${esc(k)}">
       ${spoolSvg(s.color, cap ? total / cap : 0)}
-      <div style="min-width:0"><h4>${esc(s.material)}${s.colorName ? ' · ' + esc(s.colorName) : ''}</h4>
-        <div class="meta">${esc(s.brand || 'Marque ?')}${s.ref ? ' · ' + esc(s.ref) : ''}</div>
+      <div style="min-width:0"><h4>${esc(s.colorName || s.material)}</h4>
+        <div class="meta"><b style="color:var(--ink)">${esc(s.material)}</b> · ${esc(s.brand || 'Marque ?')}</div>
+        <div class="meta">${s.ref ? `Réf. <b style="color:var(--ink)">${esc(s.ref)}</b> · ` : ''}${eur(spoolPerKg(s))}/kg</div>
         <div class="kg ${isLow ? 'neg' : ''}">${total >= 1000 ? kgTxt(total) : gr(total)}</div>
         <div class="meta">${sps.length > 1 ? `<span class="pill brand">${sps.length} bobines</span> ` : ''}${inMachine.map(x => { const [pr, sl] = x.amsWhere.split(' · '); return `📍${esc(pr.split(' ').pop())} ${esc(sl || '')}`; }).join(' ')}${reserve ? ` 📦${reserve > 1 ? reserve : ''}` : ''}${total <= 0 ? ' <span class="pill">vide</span>' : isLow ? ' <span class="pill bad">bientôt vide</span>' : ''}</div>
         ${open && sps.length > 1 ? `<div class="subList">${sps.map(x => spoolRow(x, low)).join('')}</div>` : ''}
@@ -2572,7 +2584,7 @@ function renderBambu() {
         <div class="slotTop"><span class="slotId">${label}</span><span class="dotBig" style="background:${esc(t.color || '#999')}"></span></div>
         <div class="name" title="${esc(t.brand || t.type)}">${esc(t.brand || t.type)}</div>
         ${t.grams != null ? `<div class="g">${gr(t.grams)}</div>${t.remain >= 0 ? `<div class="muted">${t.remain} %</div>` : ''}` : sp?.trackFrom ? `<div class="g">≈ ${gr(sp.remaining)}</div><div class="muted">calculé (historique)</div>` : '<div class="muted">quantité inconnue<br>(sans puce Bambu)</div>'}
-        ${sp ? `<div class="inStock">✓ dans ton stock</div>` : `<button class="link" data-add="${esc(d.id)}|${t.ext ? 'ext' : t.index}">＋ Ajouter au stock</button>`}
+        ${sp ? `<div class="inStock">✓ dans ton stock</div>` : `<button class="link" data-add="${esc(d.id)}|${t.ext ? 'ext' : t.index}">＋ Ajouter au stock</button>${!t.rfid && linkCandidates(t).length ? `<button class="link" data-link="${esc(d.id)}|${t.ext ? 'ext' : t.index}">🔗 C’est une bobine du stock</button>` : ''}`}
       </div>`;
     };
     const units = a ? a.units.map(u => `<div class="amsBox"><div class="amsHead"><b>AMS ${u.letter}</b>${dual && u.nozzle != null ? ` · buse ${u.nozzle === 1 ? 'gauche' : 'droite'}` : ''}${u.humidity != null ? ` · 💧 ${u.humidity} %` : ''}${u.temp != null ? ` · ${fr(u.temp)} °C` : ''}</div>
@@ -2852,6 +2864,14 @@ function syncAmsToSpools() {
   if (!bambu?.devices) return;
   let changed = false;
   const seen = new Set();
+  // bobine Bambu à puce pas encore reliée : on reprend celle saisie à la main (même référence, en réserve), entamée d'abord
+  for (const x of allTrays()) {
+    if (!x.t.rfid || x.t.empty || spoolForTray(x.t, x.dev)) continue;
+    const ref = bambuCatEntry(x.t)?.ref; if (!ref) continue;
+    const cand = state.spools.filter(s => !s.amsUuid && !s.amsWhere && s.ref === ref && /bambu/i.test(s.brand || ''))
+      .sort((a, b) => (a.remaining < a.weight ? 0 : 1) - (b.remaining < b.weight ? 0 : 1) || a.remaining - b.remaining)[0];
+    if (cand) { cand.amsUuid = x.t.uuid; cand.amsLoc = trayKey(x.t, x.dev); changed = true; toast(`🔗 ${cand.material} ${cand.colorName || ''} reliée à l’AMS (${x.where}) : restant lu sur l’imprimante`); }
+  }
   for (const x of allTrays()) {
     const sp = spoolForTray(x.t, x.dev); if (!sp) continue;
     seen.add(sp.id);
@@ -2904,8 +2924,27 @@ function onTaskAction(e) {
   }
   return false;
 }
+// Bobines de la réserve qui peuvent être celle posée dans un emplacement sans puce (même famille de matière)
+const linkCandidates = t => state.spools.filter(s => !s.amsUuid && !s.amsWhere && s.remaining > 0 && (matOk(s.material, t.type) || matOk(t.type, s.material) || baseMat(s.material).split(/[\s-]/)[0] === baseMat(t.type).split(/[\s-]/)[0]));
+let linkTray = null;
+$('fLink').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'save' || !linkTray) return;
+  const sp = spoolById($('linkSel').value); if (!sp) return;
+  Object.assign(sp, {amsLoc: trayKey(linkTray.t, linkTray.dev), amsWhere: linkTray.where, trackFrom: new Date().toISOString(), trackBase: sp.remaining, trackExact: true, trackUsed: 0});
+  save(); renderBambu(); toast(`🔗 Reliée à ${linkTray.where} : le restant se calcule maintenant avec l’historique`);
+  linkTray = null;
+});
 $('bambuCard').addEventListener('click', async e => {
   if (onTaskAction(e)) return;
+  const lk = e.target.closest('[data-link]');
+  if (lk) {
+    const [dev, idx] = lk.dataset.link.split('|');
+    linkTray = allTrays().find(y => y.dev === dev && String(y.t.ext ? 'ext' : y.t.index) === idx); if (!linkTray) return;
+    $('linkWhere').textContent = linkTray.where;
+    $('linkSel').innerHTML = linkCandidates(linkTray.t).map(s => `<option value="${esc(s.id)}">${esc(s.colorName || s.material)} · ${esc(s.material)} · ${esc(s.brand || '')} — ${gr(s.remaining)}${s.remaining < s.weight ? ' (entamée)' : ''}</option>`).join('');
+    $('dlgLink').showModal();
+    return;
+  }
   const add = e.target.closest('[data-add]');
   if (add) {
     const [dev, idx] = add.dataset.add.split('|');
