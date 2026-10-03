@@ -106,6 +106,49 @@ export function normPrinter(p = {}) {
     state: p.gcode_state || '', progress: p.mc_percent ?? null, job: p.subtask_name || ''};
 }
 
+// Impression de l'historique Bambu, en version courte
+function normTask(t) {
+  return {
+    id: String(t.id), title: t.title || t.designTitle || '', device: t.deviceId, deviceName: t.deviceName || '',
+    status: t.status, start: t.startTime || null, end: t.endTime || null, weight: Number(t.weight) || 0, minutes: Math.round((Number(t.costTime) || 0) / 60),
+    plate: t.plateIndex ?? null, cover: t.cover || '', photo: t.snapShot || '',
+    // « ams » = numéro global de l'emplacement (AMS × 4 + emplacement) ; targetColor = couleur de la bobine utilisée
+    ams: (t.amsDetailMapping || []).map(m => ({type: m.filamentType || m.targetFilamentType || '', color: hex(m.targetColor || m.sourceColor),
+      weight: Number(m.weight) || 0, index: m.ams ?? null, letter: m.ams != null && m.ams < 64 ? String.fromCharCode(65 + Math.floor(m.ams / 4)) + (m.ams % 4 + 1) : '', nozzle: m.nozzleId ?? null})),
+  };
+}
+// L'historique est gardé dans la base : il s'accumule au fil des lectures
+async function storeTasks(tasks) {
+  if (!tasks.length) return;
+  await sql`insert into pc_tasks (id, data, ended_at)
+            select x->>'id', x, nullif(x->>'end', '')::timestamptz from jsonb_array_elements(${JSON.stringify(tasks)}::jsonb) as x
+            on conflict (id) do update set data = excluded.data, ended_at = excluded.ended_at`;
+}
+async function history(full) {
+  let fetched = 0;
+  if (full) {
+    const [row] = await sql`select token_enc from pc_bambu where id = 1`;
+    if (!row?.token_enc) return {connected: false};
+    const token = decrypt(row.token_enc), seen = new Set();
+    let after = null;
+    for (let page = 0; page < 25; page++) {
+      const r = await call(`/v1/user-service/my/tasks?limit=100${after ? `&after=${after}` : ''}`, {token});
+      if (r.status === 401 || r.status === 403) return {connected: false, expired: true};
+      const hits = (r.data?.hits || []).filter(t => !seen.has(String(t.id)));
+      if (!hits.length) break;
+      hits.forEach(t => seen.add(String(t.id)));
+      await storeTasks(hits.map(normTask));
+      fetched += hits.length;
+      after = hits[hits.length - 1].id;
+      if ((r.data?.hits || []).length < 100) break;
+    }
+  }
+  const rows = await sql`select data from pc_tasks order by ended_at desc nulls last`;
+  const [b] = await sql`select snapshot from pc_bambu where id = 1`;
+  const devices = (b?.snapshot?.devices || []).map(d => ({id: d.dev_id, name: d.name, model: d.dev_product_name || d.dev_model_name || ''}));
+  return {tasks: rows.map(r => r.data), devices, fetched};
+}
+
 async function status() {
   const [row] = await sql`select account, token_enc, username, expires_at from pc_bambu where id = 1`;
   if (!row?.token_enc) return {connected: false};
@@ -117,14 +160,8 @@ async function status() {
 
   const tasksR = await call('/v1/user-service/my/tasks?limit=30', {token});
   const hits = tasksR.data?.hits || [];
-  const tasks = hits.map(t => ({
-    id: String(t.id), title: t.title || t.designTitle || '', device: t.deviceId, deviceName: t.deviceName || '',
-    status: t.status, start: t.startTime, end: t.endTime, weight: Number(t.weight) || 0, minutes: Math.round((Number(t.costTime) || 0) / 60),
-    plate: t.plateIndex ?? null,
-    // « ams » = numéro global de l'emplacement (AMS × 4 + emplacement) ; targetColor = couleur de la bobine utilisée
-    ams: (t.amsDetailMapping || []).map(m => ({type: m.filamentType || m.targetFilamentType || '', color: hex(m.targetColor || m.sourceColor),
-      weight: Number(m.weight) || 0, index: m.ams ?? null, letter: m.ams != null && m.ams < 64 ? String.fromCharCode(65 + Math.floor(m.ams / 4)) + (m.ams % 4 + 1) : '', nozzle: m.nozzleId ?? null})),
-  }));
+  const tasks = hits.map(normTask);
+  await storeTasks(tasks);
 
   let raw = {}, amsError = null;
   try { raw = await amsSnapshot(row.username, token, devices.filter(d => d.online).map(d => d.id)); }
@@ -142,7 +179,7 @@ export default async function handler(req, res) {
   await schema();
   if (!requireAuth(req, res)) return;
   try {
-    if (req.method === 'GET') return res.json(await status());
+    if (req.method === 'GET') return res.json(req.query?.history ? await history(req.query.history === 'full') : await status());
     if (req.method !== 'POST') return res.status(405).json({error: 'Méthode non autorisée.'});
     if (!sameOrigin(req)) return res.status(403).json({error: 'Origine refusée.'});
     const {action, account = '', password = '', code = '', tfaKey = ''} = req.body || {};

@@ -208,7 +208,13 @@ td.n,th.n{text-align:right;white-space:nowrap}
 td.d{white-space:nowrap}
 .task{padding:12px 0;border-bottom:1px dashed var(--line)}
 .task:last-child{border-bottom:0}
+.task{display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:start}
+.task .tImg{width:72px;height:72px;border-radius:14px;object-fit:cover;background:var(--card2);display:grid;place-items:center;font-size:26px}
 .task .tTitle{font-weight:700;overflow-wrap:anywhere}
+.showSm{display:none}
+.seg{display:inline-flex;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:3px;gap:2px;margin-bottom:12px;flex-wrap:wrap}
+.seg button{border:0;background:none;border-radius:9px;padding:7px 12px;font-weight:650;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
 .task .tActs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 tbody tr[data-sale]:hover{background:var(--card2)}
 .tableWrap{overflow-x:auto;margin:0 -4px}
@@ -351,6 +357,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   .listEdit .row{grid-template-columns:1fr 1fr 34px}
   .listEdit .row>:first-child{grid-column:1/-1}
   .hideSm{display:none}
+  .showSm{display:block}
   .stack{grid-template-columns:1fr}
   .grid4>:nth-child(2){grid-column:1/-1}
   .filRow{grid-template-columns:30px 1fr 40px}
@@ -549,6 +556,12 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
       <div class="card"><div class="cardHead"><span class="badgeIcon">📦</span><h2>Stock</h2></div><div id="repStock"></div></div>
     </div>
     <div class="card"><div class="cardHead"><span class="badgeIcon">📈</span><h2>Bénéfice sur 12 mois</h2></div><div id="repChart"></div></div>
+    <div class="card" id="prodCard" hidden>
+      <div class="cardHead"><span class="badgeIcon">🏭</span><h2>Production des imprimantes</h2></div>
+      <div class="seg" id="prodSeg"><button data-p="m" class="on">Mois</button><button data-p="t">Trimestre</button><button data-p="s">Semestre</button><button data-p="y">Année</button></div>
+      <div id="prodBody"></div>
+      <div class="toolbar" style="margin:12px 0 0"><span class="hint" id="prodInfo" style="margin:0"></span><button class="btn small" id="prodFull">↻ Récupérer tout l’historique</button></div>
+    </div>
     <div class="card"><div class="cardHead"><span class="badgeIcon">🗓️</span><h2>Mois par mois</h2></div><div class="tableWrap"><table id="repMonths"></table></div>
       <p class="hint">Le coût de revient d'une vente inclut déjà une part pour le risque d'échec ; la colonne « Ratés » montre ce que les impressions ratées ont réellement coûté.</p></div>
     <div class="grid2 stack" style="align-items:start">
@@ -1932,6 +1945,55 @@ function bambuColorName(t) {
 }
 
 /* ---------- Bilan ---------- */
+/* ---------- Production : tout ce que les imprimantes ont imprimé (historique Bambu) ---------- */
+let hist = null, histAt = 0, prodPer = 'm';
+async function loadHistory(full = false) {
+  if (!cloud.logged) { $('prodCard').hidden = true; return; }
+  if (!full && hist && Date.now() - histAt < 300000) return renderProd();
+  $('prodCard').hidden = false;
+  $('prodInfo').textContent = full ? '⏳ Récupération de tout l’historique Bambu…' : '⏳ Chargement…';
+  try {
+    const r = await api('/api/bambu?history=' + (full ? 'full' : '1'));
+    if (r.ok && r.data.tasks) { hist = r.data; histAt = Date.now(); if (full) toast(`🏭 ${r.data.fetched} impression${r.data.fetched > 1 ? 's' : ''} lue${r.data.fetched > 1 ? 's' : ''} chez Bambu`); }
+    else if (r.data?.expired) $('prodInfo').textContent = 'Connexion Bambu expirée : reconnecte ton compte dans Filaments.';
+  } catch { $('prodInfo').textContent = 'Serveur injoignable.'; }
+  renderProd();
+}
+const periodKey = (d, p) => { const y = d.slice(0, 4), m = +d.slice(5, 7); return p === 'm' ? d.slice(0, 7) : p === 't' ? `${y}-T${Math.ceil(m / 3)}` : p === 's' ? `${y}-S${m <= 6 ? 1 : 2}` : y; };
+const periodLabel = (k, p) => p === 'm' ? monthLabel(k) : p === 't' ? `${k.slice(-1) === '1' ? '1er' : k.slice(-1) + 'e'} trimestre ${k.slice(0, 4)}` : p === 's' ? `${k.slice(-1) === '1' ? '1er' : '2e'} semestre ${k.slice(0, 4)}` : k;
+// Coût de production d'une impression : filament + électricité + machine (amortissement + maintenance), sans main-d'œuvre
+function taskCost(t) {
+  const j = taskToJob(t, true); j.prepMin = 0; j.finishMin = 0; j.packaging = 0; j.asm = defaultAsm();
+  const c = computeCost(j);
+  return {material: c.material, power: c.power, machine: c.machine + c.maint, total: c.material + c.power + c.machine + c.maint, grams: c.grams, h: c.h, printer: j.printerId};
+}
+function renderProd() {
+  const box = $('prodBody'); if (!hist) return;
+  $('prodCard').hidden = false;
+  $('prodSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.p === prodPer));
+  const done = hist.tasks.filter(t => (t.end || t.start) && t.status !== 1);
+  const groups = new Map();
+  for (const t of done) {
+    const k = periodKey(String(t.end || t.start).slice(0, 10), prodPer), c = taskCost(t), ok = t.status === 2;
+    const g = groups.get(k) || {n: 0, h: 0, grams: 0, material: 0, power: 0, machine: 0, total: 0, failN: 0, failCost: 0};
+    if (ok) { g.n++; g.h += c.h; g.grams += c.grams; g.material += c.material; g.power += c.power; g.machine += c.machine; g.total += c.total; }
+    else { g.failN++; g.failCost += c.total; }
+    groups.set(k, g);
+  }
+  const keys = [...groups.keys()].sort().reverse();
+  const tot = [...groups.values()].reduce((a, g) => ({n: a.n + g.n, total: a.total + g.total, h: a.h + g.h}), {n: 0, total: 0, h: 0});
+  const oldest = done.at(-1);
+  $('prodInfo').textContent = done.length ? `${done.length} impression${done.length > 1 ? 's' : ''} connue${done.length > 1 ? 's' : ''}${oldest ? ' depuis le ' + fmtDate(String(oldest.end || oldest.start).slice(0, 10)) + ' ' + String(oldest.end || oldest.start).slice(0, 4) : ''}` : 'Aucune impression enregistrée pour l’instant.';
+  box.innerHTML = keys.length ? `<div class="tableWrap"><table><thead><tr><th>Période</th><th class="n">Impr.</th><th class="n hideSm">Heures</th><th class="n">Filament</th><th class="n hideSm">Coût fil.</th><th class="n hideSm">Électr.</th><th class="n hideSm">Machine</th><th class="n">Coût total</th><th class="n hideSm">Ratées</th></tr></thead><tbody>${keys.map(k => { const g = groups.get(k); return `<tr>
+      <td>${periodLabel(k, prodPer)}<div class="hint showSm" style="margin:2px 0 0">${dur(g.h)} · fil. ${eur(g.material)} · élec. ${eur(g.power)} · mach. ${eur(g.machine)}${g.failN ? ` · ${g.failN} ratée${g.failN > 1 ? 's' : ''}` : ''}</div></td><td class="n">${g.n}</td><td class="n hideSm">${dur(g.h)}</td><td class="n">${g.grams >= 1000 ? fr(g.grams / 1000) + ' kg' : gr(g.grams)}</td>
+      <td class="n hideSm">${eur(g.material)}</td><td class="n hideSm">${eur(g.power)}</td><td class="n hideSm">${eur(g.machine)}</td><td class="n"><b>${eur(g.total)}</b></td>
+      <td class="n hideSm">${g.failN ? `${g.failN} · ${eur(g.failCost)}` : '—'}</td></tr>`; }).join('')}</tbody></table></div>
+    <p class="hint">En moyenne <b>${eur(tot.n ? tot.total / tot.n : 0)}</b> par impression réussie et <b>${eur(tot.h ? tot.total / tot.h : 0)}</b> par heure d’impression. Coût de production seulement (filament au prix de tes bobines actuelles, électricité, amortissement et maintenance de la vraie imprimante) ; sans ton temps ni l’emballage. Les impressions ratées sont comptées à part, sur leur poids prévu.</p>`
+    : '<div class="empty"><span class="big">🏭</span>L’historique se remplit à chaque lecture de tes imprimantes. Touche « Récupérer tout l’historique » pour remonter plus loin.</div>';
+}
+$('prodSeg').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (!b) return; prodPer = b.dataset.p; renderProd(); });
+$('prodFull').onclick = async () => { $('prodFull').disabled = true; await loadHistory(true); $('prodFull').disabled = false; };
+
 function renderReport() {
   const now = today().slice(0, 7), year = now.slice(0, 4), monthName = monthLabel(now).split(' ')[0];
   const inMonth = state.sales.filter(s => s.date.startsWith(now)), inYear = state.sales.filter(s => s.date.startsWith(year));
@@ -2252,11 +2314,12 @@ function renderBambu() {
   const unlinked = allTrays().filter(({t, dev}) => !t.empty && !spoolForTray(t, dev)).length;
   const devName = id => bambu.devices.find(d => d.id === id)?.name || '';
   const tasks = (bambu.tasks || []).slice(0, 12).map(t => `<div class="task">
+    ${taskImg(t)}<div style="min-width:0">
     <div class="tTitle">${esc((t.title || 'Impression').replace(/_/g, ' ').replace(/\s+/g, ' ').trim())}</div>
     <div class="hint" style="margin:2px 0 0">${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) + ' · ' : ''}${esc(t.deviceName || devName(t.device))}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''} · <b>${gr(t.weight)}</b> · ${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</div>
     <div class="trays" style="margin-top:6px">${t.ams.map(m => `<span class="tray"><span class="dot" style="background:${esc(m.color || '#999')}"></span>${esc(m.letter || m.type)} · ${gr(m.weight)}</span>`).join('')}</div>
     ${t.weight > 0 ? `<div class="tActs"><button class="btn small" data-tsell="${esc(t.id)}">💸 Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">🧮 Calculer</button></div>` : ''}
-  </div>`).join('');
+  </div></div>`).join('');
   box.innerHTML = head + `<p class="hint" style="margin-top:0">Compte ${esc(bambu.account || '')} · <button class="link" id="bLogout">Déconnecter</button></p>
     ${unlinked ? `<div class="notice" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🧵 ${unlinked} bobine${unlinked > 1 ? 's' : ''} de l’AMS pas encore dans ton stock. <button class="btn small primary" id="bAddAll">Tout ajouter au stock</button></div>` : ''}
     ${devs}
@@ -2306,10 +2369,13 @@ function syncAmsToSpools() {
 }
 // Une impression de l'historique Bambu → calcul de coût (grammes réels par emplacement, temps réel)
 const spoolAt = (dev, index) => state.spools.find(s => s.amsLoc === `${dev}:${index}`);
-function taskToJob(t) {
-  const d = bambu?.devices?.find(x => x.id === t.device), j = newJob();
+// Image d'une impression passée : vignette du fichier, sinon photo de fin prise par l'imprimante
+const taskImg = t => (t.cover || t.photo) ? `<img class="tImg" src="${esc(t.cover || t.photo)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'tImg',textContent:'🧊'}))">` : '<span class="tImg">🧊</span>';
+function taskToJob(t, realPrinter = false) {
+  const d = (bambu?.devices || hist?.devices || []).find(x => x.id === t.device), j = newJob();
   j.name = (t.title || 'Impression').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-  if (state.settings.printerMode === 'file' && d) j.printerId = state.printers.find(p => p.name.toUpperCase().includes(prCode(d.model)))?.id || defaultPrinterId();
+  j.thumb = t.cover || t.photo || null;
+  if ((realPrinter || state.settings.printerMode === 'file') && d) j.printerId = state.printers.find(p => p.name.toUpperCase().includes(prCode(d.model)))?.id || defaultPrinterId();
   const mins = Number(t.minutes) || 0; j.hours = Math.floor(mins / 60); j.minutes = mins % 60;
   j.filaments = t.ams?.length ? t.ams.map(m => {
     const sp = spoolAt(t.device, m.index);
@@ -2388,7 +2454,7 @@ function showTab(name) {
   renderTab(name); updateSumBar();
   try { sessionStorage.setItem('pc3d-tab', name); } catch {}
 }
-function renderTab(name) { ({calc: () => { renderFils(); updateResult(); }, catalog: renderCatalog, sales: renderSales, spools: () => { renderSpools(); loadBambu(); }, report: renderReport})[name]?.(); }
+function renderTab(name) { ({calc: () => { renderFils(); updateResult(); }, catalog: renderCatalog, sales: renderSales, spools: () => { renderSpools(); loadBambu(); }, report: () => { renderReport(); loadHistory(); }})[name]?.(); }
 function renderAll() { renderTab(document.querySelector('.panel.active').id); }
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => { showTab(b.dataset.tab); window.scrollTo({top: 0}); });
 
