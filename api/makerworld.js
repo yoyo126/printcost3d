@@ -110,8 +110,11 @@ async function search(req, res) {
   const q = String(req.query.q || '').slice(0, 100), offset = Math.max(0, parseInt(req.query.offset) || 0), limit = Math.min(40, parseInt(req.query.limit) || 24);
   // sell=1 : seulement les licences qui autorisent la vente des impressions (filtre fait par MakerWorld)
   const lic = req.query.sell === '1' ? '&licenses=BY,BY-SA,BY-ND,CC0' : '';
+  // Filtres de MakerWorld / Bambu Handy (mêmes noms), valeurs contrôlées
+  const F = ['orderBy', 'designCreateSince', 'devModelNames', 'nozzleDiameters', 'multiColor', 'printDuration', 'model_tag', 'categories', 'isPrintable'];
+  const filt = F.map(k => req.query[k] != null && /^[\w.,\- ]{1,200}$/.test(String(req.query[k])) ? `&${k}=${encodeURIComponent(String(req.query[k]))}` : '').join('');
   const token = await bambuToken().catch(() => null);
-  const r = await mw(`/search-service/select/design2?keyword=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${lic}`, token);
+  const r = await mw(`/search-service/select/design2?keyword=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${lic}${filt}`, token);
   if (!r.ok) return fail(res, r, 'Recherche');
   res.json({total: r.data?.total || 0, got: (r.data?.hits || []).length, hits: hitsOf(r.data).map(hit)});
 }

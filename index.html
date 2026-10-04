@@ -270,6 +270,12 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .navRow::-webkit-scrollbar{display:none}
 .navRow button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 13px;font-weight:650;font-size:13.5px;color:var(--muted);white-space:nowrap;cursor:pointer}
 .navRow button.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.filtCard{padding:12px 14px;margin-bottom:12px}
+.filtCard h4{margin:10px 0 6px;font-size:13.5px}
+.filtCard h4:first-child{margin-top:0}
+.filtCard .navRow{flex-wrap:wrap;overflow:visible;margin:0}
+.filtActs{display:flex;gap:8px;margin-top:14px}
+.filtActs .btn{flex:1}
 .people{display:flex;gap:12px;overflow-x:auto;scrollbar-width:none;margin:0 -4px 10px;padding:2px 4px}
 .people::-webkit-scrollbar{display:none}
 .people button{flex:none;width:64px;border:0;background:none;padding:0;display:grid;justify-items:center;gap:4px;cursor:pointer;color:var(--muted);font-size:11.5px;font-weight:600}
@@ -662,7 +668,8 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
       <form class="linkRow" id="shopForm" style="margin:0 0 10px"><input id="shopQ" type="search" placeholder="Rechercher sur MakerWorld : porte-clés, vase, support casque…" enterkeyhint="search"><button class="btn primary">Rechercher</button></form>
       <div class="navRow sub" id="shopFolders" hidden></div>
       <div class="people" id="shopPeople" hidden></div>
-      <div class="toolbar" style="margin-bottom:10px"><label class="check" id="shopSellBox"><input type="checkbox" id="shopSell" checked> Revendables seulement</label><span class="hint" id="shopInfo" style="margin:0"></span></div>
+      <div class="toolbar" style="margin-bottom:10px"><button type="button" class="btn" id="shopFiltBtn">⚙️ Trier et filtrer</button><label class="check" id="shopSellBox"><input type="checkbox" id="shopSell" checked> Revendables seulement</label><span class="hint" id="shopInfo" style="margin:0"></span></div>
+      <div class="card filtCard" id="shopFilt" hidden></div>
       <div id="shopResults" class="catGrid"></div>
       <button class="btn" id="shopMore" style="width:100%;margin-top:12px" hidden>Voir plus</button>
     </div>
@@ -3182,7 +3189,17 @@ setInterval(() => {
 }, 60000);
 
 /* ---------- Boutique MakerWorld : chercher, voir le détail, calculer, envoyer vers Bambu Handy ---------- */
-const shop = {creator: '', creators: null, mode: null, key: '', q: '', folder: 'all', offset: 0, seed: 0, total: 0, more: false, hits: [], busy: false, seq: 0, navs: null, bambu: false, folders: null, err: ''};
+const SHOP_FILTERS = [
+  {k: 'orderBy', t: 'Trier par', one: true, o: [['', 'Pertinence'], ['hotScore', 'Tendance'], ['boosts', 'Boosts'], ['newUploads', 'Le plus récent'], ['downloadCount', 'Téléchargements'], ['likeCount', 'J’aime']]},
+  {k: 'designCreateSince', t: 'Publié', one: true, o: [['', 'Toujours'], ['1', '24 h'], ['7', '7 jours'], ['30', '30 jours'], ['365', '1 an']]},
+  {k: 'devModelNames', t: 'Profil d’impression pour', o: [['O1D', 'H2D'], ['N7', 'P2S'], ['O1E', 'H2D Pro'], ['O1C2', 'H2C'], ['O1S', 'H2S'], ['N6', 'X2D'], ['BL-P001', 'X1 Carbon'], ['BL-P002', 'X1'], ['C13', 'X1E'], ['C12', 'P1S'], ['C11', 'P1P'], ['N2S', 'A1'], ['N1', 'A1 mini'], ['N9', 'A2L']]},
+  {k: 'nozzleDiameters', t: 'Diamètre de buse', o: [['0.2', '0,2 mm'], ['0.4', '0,4 mm'], ['0.6', '0,6 mm'], ['0.8', '0,8 mm']]},
+  {k: 'multiColor', t: 'Couleurs', one: true, o: [['', 'Toutes'], ['false', 'Une seule couleur'], ['true', 'Multicolore']]},
+  {k: 'printDuration', t: 'Temps d’impression', one: true, o: [['', 'Tous'], ['1-30', '< 30 min'], ['30-60', '30 min – 1 h'], ['60-120', '1 – 2 h'], ['120-300', '2 – 5 h'], ['300-600', '5 – 10 h'], ['600-100000', '> 10 h']]},
+  {k: 'model_tag', t: 'Tags', o: [['featured', 'En vedette'], ['exclusive', 'Exclusif'], ['custom', 'Personnalisable'], ['param', 'Paramétrique'], ['ms', 'Maker’s Supply']]},
+  {k: 'categories', t: 'Catégories', o: []},
+];
+const shop = {f: {}, creator: '', creators: null, mode: null, key: '', q: '', folder: 'all', offset: 0, seed: 0, total: 0, more: false, hits: [], busy: false, seq: 0, navs: null, bambu: false, folders: null, err: ''};
 const kNum = n => n >= 1000 ? (n / 1000).toLocaleString('fr-FR', {maximumFractionDigits: 1}) + ' k' : String(n);
 // Boutique « comme Bambu Handy » : rubriques (Pour vous, Tendance, catégories…), favoris du compte Bambu, recherche
 async function openShop() {
@@ -3203,6 +3220,10 @@ function renderShopNav() {
   if (!$('shopFolders').hidden) $('shopFolders').innerHTML = [`<button type="button" data-folder="all" class="${shop.folder === 'all' ? 'on' : ''}">Tous</button>`,
     ...shop.folders.map(f => `<button type="button" data-folder="${f.id}" class="${String(shop.folder) === String(f.id) ? 'on' : ''}">${esc(f.name)}${f.count != null ? ` · ${f.count}` : ''}</button>`)].join('');
   $('shopSellBox').hidden = shop.mode !== 'search';
+  $('shopFiltBtn').hidden = shop.mode === 'fav' || (shop.mode === 'feed' && ['Following', 'Foryou'].includes(shop.key));
+  const nf = shopFiltCount(); $('shopFiltBtn').textContent = nf ? `⚙️ Filtres (${nf})` : '⚙️ Trier et filtrer';
+  $('shopFiltBtn').classList.toggle('primary', !!nf);
+  if ($('shopFiltBtn').hidden) $('shopFilt').hidden = true;
   const ppl = shop.mode === 'feed' && shop.key === 'Following' && shop.creators?.length;
   $('shopPeople').hidden = !ppl;
   if (ppl) $('shopPeople').innerHTML = `<button type="button" data-person="" class="${shop.creator ? '' : 'on'}"><b class="all">👥</b><span>Tous</span></button>` +
@@ -3227,7 +3248,7 @@ async function shopLoad(more) {
       shop.folders = f.ok ? f.data.folders : null; renderShopNav();
     }
     do {
-      const what = shop.mode === 'search' ? `q=${encodeURIComponent(shop.q)}${only ? '&sell=1' : ''}` : shop.mode === 'fav' ? `fav=${encodeURIComponent(shop.folder)}` : `feed=${encodeURIComponent(shop.key)}&seed=${shop.seed}${shop.creator ? `&creator=${shop.creator}${shop.unread && !more ? '&unread=1' : ''}` : ''}`;
+      const what = shop.mode === 'search' ? `q=${encodeURIComponent(shop.q)}${only ? '&sell=1' : ''}${shopFiltQuery()}` : shop.mode === 'fav' ? `fav=${encodeURIComponent(shop.folder)}` : `feed=${encodeURIComponent(shop.key)}&seed=${shop.seed}${shop.creator ? `&creator=${shop.creator}${shop.unread && !more ? '&unread=1' : ''}` : ''}`;
       const r = await api(`/api/makerworld?${what}&offset=${shop.offset}&limit=30`);
       if (seq !== shop.seq) return;
       if (!r.ok) { shop.err = r.data?.error || 'MakerWorld ne répond pas.'; break; }
@@ -3245,7 +3266,7 @@ const shopBadge = h => h.license == null ? '' : mwCommercial(h.license) ? '<span
 function renderShop() {
   const nav = shop.navs?.find(n => n.key === shop.key), only = $('shopSell').checked;
   $('shopInfo').textContent = shop.err ? '⚠️ ' + shop.err
-    : shop.mode === 'search' ? `${shop.total.toLocaleString('fr-FR')} modèles${only ? ' revendables' : ''} pour « ${shop.q} »`
+    : shop.mode === 'search' ? `${shop.total.toLocaleString('fr-FR')} modèles${only ? ' revendables' : ''}${shop.q ? ` pour « ${shop.q} »` : ''}${shopFiltCount() ? ' · filtrés' : ''}`
     : shop.mode === 'fav' ? `${shop.total.toLocaleString('fr-FR')} modèle${shop.total > 1 ? 's' : ''} en favori · les mêmes que dans Bambu Handy`
     : shop.key === 'Following' && shop.creator ? `Modèles de ${shop.creators?.find(c => String(c.uid) === String(shop.creator))?.name || 'ce créateur'}`
     : (nav?.name || '') + (shop.hits.some(h => h.license == null) ? ' · la licence s’affiche en ouvrant le modèle' : '');
@@ -3257,10 +3278,37 @@ function renderShop() {
       : emptyState('🔍', 'Aucun modèle', only && shop.mode === 'search' ? 'Aucun modèle revendable trouvé : décoche « Revendables seulement » ou change de mot.' : 'Essaie une autre rubrique ou un autre mot.'));
   $('shopMore').hidden = !shop.more;
 }
-$('shopForm').onsubmit = e => { e.preventDefault(); const q = $('shopQ').value.trim(); q ? shopGo({mode: 'search', q}) : shopGo({mode: 'feed', key: 'Trending'}); $('shopQ').blur(); };
+$('shopForm').onsubmit = e => { e.preventDefault(); const q = $('shopQ').value.trim(); q || shopFiltCount() ? shopGo({mode: 'search', q}) : shopGo({mode: 'feed', key: 'Trending'}); $('shopQ').blur(); };
 $('shopSell').onchange = () => { if (shop.mode === 'search') shopLoad(false); };
 $('shopMore').onclick = () => shopLoad(true);
-$('shopNav').addEventListener('click', e => { const b = e.target.closest('[data-nav]'); if (!b) return; b.dataset.nav === '★' ? shopGo({mode: 'fav'}) : shopGo({mode: 'feed', key: b.dataset.nav}); });
+$('shopNav').addEventListener('click', e => { const b = e.target.closest('[data-nav]'); if (!b) return; shop.f = {}; $('shopFilt').hidden = true; b.dataset.nav === '★' ? shopGo({mode: 'fav'}) : shopGo({mode: 'feed', key: b.dataset.nav}); });
+// Trier et filtrer (les mêmes choix que MakerWorld / Bambu Handy) : s'applique à la recherche, ou à toute une rubrique
+const shopFiltCount = () => Object.values(shop.f).filter(v => Array.isArray(v) ? v.length : v).length;
+const shopFiltQuery = () => Object.entries(shop.f).map(([k, v]) => (Array.isArray(v) ? v.length : v) ? `&${k}=${encodeURIComponent(Array.isArray(v) ? v.join(',') : v)}` : '').join('');
+let shopDraft = {};
+function renderShopFilt() {
+  const cats = (shop.navs || []).filter(n => /^category_\d+$/.test(n.key)).map(n => [n.key.slice(9), n.name]);
+  $('shopFilt').innerHTML = SHOP_FILTERS.map(g => { const o = g.k === 'categories' ? cats : g.o; if (!o.length) return '';
+    return `<h4>${g.t}</h4><div class="navRow sub">${o.map(([v, l]) => { const cur = shopDraft[g.k]; const on = g.one ? (cur || '') === v : (cur || []).includes(v);
+      return `<button type="button" class="${on ? 'on' : ''}" data-fk="${g.k}" data-fv="${esc(v)}">${esc(l)}</button>`; }).join('')}</div>`; }).join('') +
+    `<div class="filtActs"><button type="button" class="btn" data-freset>Tout effacer</button><button type="button" class="btn primary" data-fapply>Afficher les modèles</button></div>`;
+}
+$('shopFiltBtn').onclick = () => {
+  if (!$('shopFilt').hidden) { $('shopFilt').hidden = true; return; }
+  shopDraft = JSON.parse(JSON.stringify(shop.f));
+  // depuis une catégorie, on garde la catégorie ; depuis « Tendance », le tri tendance
+  if (shop.mode === 'feed' && /^category_\d+$/.test(shop.key) && !shopDraft.categories?.length) shopDraft.categories = [shop.key.slice(9)];
+  if (shop.mode === 'feed' && shop.key === 'Trending' && !shopDraft.orderBy) shopDraft.orderBy = 'hotScore';
+  renderShopFilt(); $('shopFilt').hidden = false;
+};
+$('shopFilt').addEventListener('click', e => {
+  const b = e.target.closest('[data-fk]');
+  if (b) { const g = SHOP_FILTERS.find(x => x.k === b.dataset.fk), v = b.dataset.fv;
+    if (g.one) shopDraft[g.k] = v; else { const a = shopDraft[g.k] ||= []; a.includes(v) ? a.splice(a.indexOf(v), 1) : a.push(v); }
+    renderShopFilt(); return; }
+  if (e.target.closest('[data-freset]')) { shopDraft = {}; renderShopFilt(); return; }
+  if (e.target.closest('[data-fapply]')) { shop.f = shopDraft; $('shopFilt').hidden = true; shopGo({mode: 'search', q: shop.mode === 'search' ? shop.q : $('shopQ').value.trim()}); $('shopQ').value = shop.q; }
+});
 $('shopPeople').addEventListener('click', e => {
   const b = e.target.closest('[data-person]'); if (!b) return;
   const c = shop.creators?.find(x => String(x.uid) === b.dataset.person);
