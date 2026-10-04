@@ -132,28 +132,28 @@ async function storeTasks(tasks) {
             select x->>'id', x, nullif(x->>'end', '')::timestamptz from jsonb_array_elements(${JSON.stringify(tasks)}::jsonb) as x
             on conflict (id) do update set data = excluded.data, ended_at = excluded.ended_at`;
 }
-// Historique Bambu. full : récupération complète par paquets (le navigateur rappelle avec « after »
-// tant que « done » est faux), sans limite de nombre et sans dépasser le temps d'une fonction.
+// Historique Bambu. full : récupération complète par paquets, comme Bambu Studio (offset + status=0 = tous les états).
+// Le navigateur rappelle avec « after » (= offset) tant que « done » est faux : pas de limite de nombre ni de temps.
 async function history(full, start = null) {
-  let fetched = 0, total = null, next = start, done = true;
+  let fetched = 0, total = null, offset = Number(start) || 0, done = true;
   if (full) {
     const [row] = await sql`select token_enc from pc_bambu where id = 1`;
     if (!row?.token_enc) return {connected: false};
-    const token = decrypt(row.token_enc), t0 = Date.now();
+    const token = decrypt(row.token_enc), t0 = Date.now(), seen = new Set();
     done = false;
     while (Date.now() - t0 < 18000) {
-      const r = await call(`/v1/user-service/my/tasks?limit=100${next ? `&after=${next}` : ''}`, {token});
+      const r = await call(`/v1/user-service/my/tasks?limit=100&offset=${offset}&status=0`, {token});
       if (r.status === 401 || r.status === 403) return {connected: false, expired: true};
-      if (!r.ok) return {error: `Bambu répond ${r.status}.`, fetched, next, total};
+      if (!r.ok) return {error: `Bambu répond ${r.status}.`, fetched, next: String(offset), total};
       total = r.data?.total ?? total;
-      const hits = r.data?.hits || [];
-      if (hits.length) await storeTasks(hits.map(normTask));
-      fetched += hits.length;
-      const last = hits.length ? String(hits[hits.length - 1].id) : null;
-      if (hits.length < 100 || !last || last === next) { done = true; break; }
-      next = last;
+      const hits = r.data?.hits || [], fresh = hits.filter(t => !seen.has(String(t.id)));
+      fresh.forEach(t => seen.add(String(t.id)));
+      if (fresh.length) await storeTasks(fresh.map(normTask));
+      fetched += fresh.length; offset += hits.length;
+      // fin : page vide, page déjà vue (Bambu ignorerait offset) ou tout reçu
+      if (!hits.length || !fresh.length || (total != null && offset >= total)) { done = true; break; }
     }
-    if (!done) return {fetched, next, total, done: false};
+    if (!done) return {fetched, next: String(offset), total, done: false};
   }
   const rows = await sql`select data from pc_tasks order by ended_at desc nulls last`;
   const [b] = await sql`select snapshot from pc_bambu where id = 1`;

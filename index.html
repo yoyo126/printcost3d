@@ -2333,7 +2333,7 @@ async function loadHistory(full = false) {
       $('prodInfo').textContent = histProgress; if (!$('secHist').hidden) renderHist();
     }
     histProgress = '';
-    if (r?.ok && r.data.tasks) { hist = r.data; histAt = Date.now(); if (full) toast(`🏭 Historique complet : ${r.data.tasks.length.toLocaleString('fr-FR')} impressions`); }
+    if (r?.ok && r.data.tasks) { hist = r.data; histAt = Date.now(); if (full) toast(`🏭 Historique : ${r.data.tasks.length.toLocaleString('fr-FR')} impressions${r.data.total > r.data.tasks.length ? ` (Bambu en annonce ${r.data.total.toLocaleString('fr-FR')})` : ''}`); }
     else if (r?.data?.expired) $('prodInfo').textContent = 'Connexion Bambu expirée : reconnecte ton compte dans Filaments.';
     else if (r?.data?.error) toast('⚠️ ' + r.data.error);
   } catch { histProgress = ''; $('prodInfo').textContent = 'Serveur injoignable.'; }
