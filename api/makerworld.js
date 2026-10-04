@@ -47,6 +47,16 @@ async function browse(req, res) {
   }
   if (req.query.feed != null) {
     const key = String(req.query.feed).slice(0, 80);
+    // Suivis : rangée des créateurs suivis + fil de leurs modèles (filtrable sur un créateur)
+    if (key === 'Following') {
+      if (!token) return res.status(401).json({error: 'Connecte d’abord ton compte Bambu (Filaments › Imprimantes).'});
+      const creator = String(req.query.creator || '').replace(/\D/g, '');
+      const r = await mw(`/search-service/homepage/following?offset=${offset}&limit=${limit}${creator ? `&creatorUid=${creator}` : ''}`, token);
+      if (!r.ok) return fail(res, r, 'Suivis');
+      const feed = r.data?.feed || {}, raw = feed.hits || [];
+      return res.json({total: feed.total || 0, got: raw.length, hits: hitsOf(feed).map(hit),
+        creators: (r.data?.creatorWindow?.hits || []).map(c => ({uid: c.uid, name: c.name || '', avatar: c.avatar || '', unread: !!c.hasUnread}))});
+    }
     const r = key === 'Foryou'
       ? await mw(`/design-recommend-service/my/for-you?limit=${limit}&offset=${offset}&seed=${parseInt(req.query.seed) || 0}&acceptTypes=0,2`, token)
       : await mw(`/search-service/select/design/nav?navKey=${encodeURIComponent(key)}&offset=${offset}&limit=${limit}`, token);
