@@ -896,6 +896,10 @@ const eurFmt = new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR'}
 const eur = n => eurFmt.format(n || 0);
 const gr = n => `${(Math.abs(n || 0) < 10 && (n || 0) % 1 ? Math.round(n * 10) / 10 : Math.round(n || 0)).toLocaleString('fr-FR')} g`;
 const pct = n => `${(n || 0).toLocaleString('fr-FR', {maximumFractionDigits:1})} %`;
+// Lien qui ouvre directement Bambu Handy sur le modèle et le profil (le même que le bouton « Ouvrir dans Bambu Handy » de MakerWorld)
+const IS_PHONE = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const handyLink = (designId, instId) => `bambulab://bbl/design/model/detail?design_id=${designId}${instId ? `&instance_id=${instId}` : ''}`;
+const handyFromLink = url => { const m = /makerworld\.com\/[^#?]*models\/(\d+)(?:.*profileId-(\d+))?/.exec(url || ''); return m ? handyLink(m[1], m[2]) : null; };
 const dur = h => { const t = Math.round((h || 0) * 60), H = Math.floor(t / 60), M = t % 60; return H ? `${H} h ${String(M).padStart(2, '0')}` : `${M} min`; };
 const monthLabel = k => { const [y, m] = k.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', {month:'long', year:'numeric'}); };
 const monthShort = k => { const [y, m] = k.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', {month:'short'}).replace('.', ''); };
@@ -1892,6 +1896,7 @@ function renderCatalog() {
           <details class="more"><summary title="Plus">⋯</summary><div class="menu">
             <button data-act="stock" data-id="${m.id}">📦 Corriger le stock</button>
             ${m.file ? `<a href="${fileHref(m.file)}">📄 Télécharger le fichier</a>` : cloud.logged ? `<button data-act="attach" data-id="${m.id}">📎 Joindre le fichier</button>` : ''}
+            ${IS_PHONE && handyFromLink(m.link) ? `<a href="${esc(handyFromLink(m.link))}">📱 Imprimer avec Bambu Handy</a>` : ''}
             ${m.link ? `<a href="${esc(m.link)}" target="_blank" rel="noopener">🔗 Voir sur MakerWorld</a>` : ''}
             ${pr ? `<span class="hint" style="padding:6px 10px;margin:0">${esc(pr.name)}</span>` : ''}
             <button class="danger" data-act="del" data-id="${m.id}">🗑 Supprimer du catalogue</button>
@@ -3300,7 +3305,7 @@ function renderShopDetail() {
         ${inst.plates.map((pl, k) => `<button type="button" class="pick plate${sdSel.plate === String(k) ? ' on' : ''}" data-splate="${k}">${pl.thumb ? `<img src="${esc(pl.thumb)}" alt="" loading="lazy">` : '<span class="ph2">▦</span>'}<b>Plateau ${pl.index}${pl.name ? ' · ' + esc(pl.name) : ''}</b><span class="st"><strong>${dur(pl.seconds / 3600)}</strong> · <strong>${gr(pl.grams)}</strong></span></button>`).join('')}</div>` : ''}
     </div>
     <div class="shopActs">
-      <a class="btn primary" href="${esc(j.link)}" target="_blank" rel="noopener">📱 Imprimer avec Bambu Handy</a>
+      ${IS_PHONE ? `<a class="btn primary" href="${esc(handyLink(d.id, inst.id))}">📱 Imprimer avec Bambu Handy</a>` : `<a class="btn primary" href="${esc(j.link)}" target="_blank" rel="noopener">🌐 Ouvrir sur MakerWorld</a>`}
       <button class="btn" data-sadd>➕ Catalogue</button>
       <button class="btn" data-scalc>🧮 Calcul</button>
     </div>
@@ -3321,7 +3326,7 @@ function renderShopDetail() {
         <p class="hint">Calculé avec ta ${esc(state.printers.find(x => x.id === j.printerId)?.name || 'imprimante')}, tes bobines et tes réglages. Temps et grammes = ceux de l’auteur.</p>
       </div>
     </div>
-    <p class="hint">📱 « Imprimer avec Bambu Handy » ouvre ce profil sur MakerWorld : sur iPhone, Bambu Handy s’ouvre directement (ou touche « Ouvrir dans l’app »), choisis l’imprimante et lance.</p>`;
+    <p class="hint">${IS_PHONE ? `📱 « Imprimer avec Bambu Handy » ouvre directement ce profil dans Bambu Handy : choisis l’imprimante et lance. <a href="${esc(j.link)}" target="_blank" rel="noopener">Page MakerWorld</a>` : '📱 Sur ton téléphone, ce bouton ouvre directement le profil dans Bambu Handy pour lancer l’impression.'}</p>`;
 }
 $('shopDetail').addEventListener('click', e => {
   if (e.target.closest('[data-back]')) { $('shopDetail').hidden = true; $('shopList').hidden = false; return; }
