@@ -48,10 +48,11 @@ async function browse(req, res) {
   if (req.query.feed != null) {
     const key = String(req.query.feed).slice(0, 80);
     // Suivis : rangée des créateurs suivis + fil de leurs modèles (filtrable sur un créateur)
+    // (unread=1 en ouvrant un créateur avec pastille : MakerWorld le marque « vu », comme dans Bambu Handy)
     if (key === 'Following') {
       if (!token) return res.status(401).json({error: 'Connecte d’abord ton compte Bambu (Filaments › Imprimantes).'});
       const creator = String(req.query.creator || '').replace(/\D/g, '');
-      const r = await mw(`/search-service/homepage/following?offset=${offset}&limit=${limit}${creator ? `&creatorUid=${creator}` : ''}`, token);
+      const r = await mw(`/search-service/homepage/following?offset=${offset}&limit=${limit}${creator ? `&creatorUid=${creator}` : ''}${creator && req.query.unread === '1' ? '&hasUnreadCreator=true' : ''}`, token);
       if (!r.ok) return fail(res, r, 'Suivis');
       const feed = r.data?.feed || {}, raw = feed.hits || [];
       return res.json({total: feed.total || 0, got: raw.length, hits: hitsOf(feed).map(hit),

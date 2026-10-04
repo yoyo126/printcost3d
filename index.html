@@ -3227,7 +3227,7 @@ async function shopLoad(more) {
       shop.folders = f.ok ? f.data.folders : null; renderShopNav();
     }
     do {
-      const what = shop.mode === 'search' ? `q=${encodeURIComponent(shop.q)}${only ? '&sell=1' : ''}` : shop.mode === 'fav' ? `fav=${encodeURIComponent(shop.folder)}` : `feed=${encodeURIComponent(shop.key)}&seed=${shop.seed}${shop.creator ? `&creator=${shop.creator}` : ''}`;
+      const what = shop.mode === 'search' ? `q=${encodeURIComponent(shop.q)}${only ? '&sell=1' : ''}` : shop.mode === 'fav' ? `fav=${encodeURIComponent(shop.folder)}` : `feed=${encodeURIComponent(shop.key)}&seed=${shop.seed}${shop.creator ? `&creator=${shop.creator}${shop.unread && !more ? '&unread=1' : ''}` : ''}`;
       const r = await api(`/api/makerworld?${what}&offset=${shop.offset}&limit=30`);
       if (seq !== shop.seq) return;
       if (!r.ok) { shop.err = r.data?.error || 'MakerWorld ne répond pas.'; break; }
@@ -3261,7 +3261,12 @@ $('shopForm').onsubmit = e => { e.preventDefault(); const q = $('shopQ').value.t
 $('shopSell').onchange = () => { if (shop.mode === 'search') shopLoad(false); };
 $('shopMore').onclick = () => shopLoad(true);
 $('shopNav').addEventListener('click', e => { const b = e.target.closest('[data-nav]'); if (!b) return; b.dataset.nav === '★' ? shopGo({mode: 'fav'}) : shopGo({mode: 'feed', key: b.dataset.nav}); });
-$('shopPeople').addEventListener('click', e => { const b = e.target.closest('[data-person]'); if (b) shopGo({mode: 'feed', key: 'Following', creator: b.dataset.person, keepPeople: true}); });
+$('shopPeople').addEventListener('click', e => {
+  const b = e.target.closest('[data-person]'); if (!b) return;
+  const c = shop.creators?.find(x => String(x.uid) === b.dataset.person);
+  shop.unread = !!c?.unread; if (c) c.unread = false; // la pastille disparaît, et MakerWorld est prévenu
+  shopGo({mode: 'feed', key: 'Following', creator: b.dataset.person, keepPeople: true});
+});
 $('shopFolders').addEventListener('click', e => { const b = e.target.closest('[data-folder]'); if (b) shopGo({mode: 'fav', folder: b.dataset.folder}); });
 $('shopResults').addEventListener('click', e => { const c = e.target.closest('[data-mw]'); if (c) openShopDetail(+c.dataset.mw); });
 
