@@ -405,6 +405,8 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 .slotId{font-weight:800;font-family:var(--display);font-size:14px}
 .dotBig{width:22px;height:22px;border-radius:50%;box-shadow:0 0 0 1.5px var(--line);flex:none}
 .slot .name{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot .cname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot .ref{color:var(--muted);font-size:12px;font-weight:650}
 .slot .g{font-family:var(--display);font-weight:800;font-size:16px}
 .slot .link{font-size:12px;padding:4px 0;text-align:left}
 .colorGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;max-height:260px;overflow:auto;margin:10px 0 4px;padding:2px}
@@ -2711,9 +2713,11 @@ function renderBambu() {
     const slot = (t, label) => {
       if (t.empty) return `<div class="slot vide"><div class="slotTop"><span class="slotId">${label}</span><span class="dotBig" style="background:var(--line)"></span></div>vide</div>`;
       const sp = spoolForTray(t, d.id), low = t.grams != null && t.grams < state.settings.lowStock;
+      const ce = bambuCatEntry(t), cname = ce?.name || sp?.colorName || '', ref = ce?.ref || sp?.ref || '';
       return `<div class="slot${a?.active === t.index && t.index != null ? ' on' : ''}${low ? ' low' : ''}">
         <div class="slotTop"><span class="slotId">${label}</span><span class="dotBig" style="background:${esc(t.color || '#999')}"></span></div>
         <div class="name" title="${esc(t.brand || t.type)}">${esc(t.brand || t.type)}</div>
+        ${cname ? `<div class="cname" title="${esc(cname)}">${esc(cname)}</div>` : ''}${ref ? `<div class="ref">Réf. ${esc(ref)}</div>` : ''}
         ${t.grams != null ? `<div class="g">${gr(t.grams)}</div>${t.remain >= 0 ? `<div class="muted">${t.remain} %</div>` : ''}` : sp?.trackFrom ? `<div class="g">≈ ${gr(sp.remaining)}</div><div class="muted">calculé (historique)</div>` : '<div class="muted">quantité inconnue<br>(sans puce Bambu)</div>'}
         ${sp ? `<div class="inStock">✓ dans ton stock</div>` : `<button class="link" data-add="${esc(d.id)}|${t.ext ? 'ext' : t.index}">＋ Ajouter au stock</button>${!t.rfid && linkCandidates(t).length ? `<button class="link" data-link="${esc(d.id)}|${t.ext ? 'ext' : t.index}">🔗 C’est une bobine du stock</button>` : ''}`}
       </div>`;
@@ -3188,9 +3192,14 @@ $('fBambu').addEventListener('submit', async e => {
 const STATE_FR = {RUNNING: 'en cours', PAUSE: 'en pause', PREPARE: 'préparation', SLICING: 'préparation', FINISH: 'terminée', FAILED: 'échouée', IDLE: 'en veille'};
 // Caméra : la vidéo en direct reste dans Bambu Handy (système vidéo fermé de Bambu) ; ce bouton ouvre l'appli
 const camLink = () => IS_PHONE ? `<a class="camBtn" href="bambulab://bbl">📹 Caméra</a>` : `<div class="hint" style="margin:6px 0 0">📹 Caméra en direct : dans Bambu Handy sur ton téléphone.</div>`;
+// Alerte en cours (HMS = messages actifs de l'imprimante ; code d'erreur seulement pendant une impression)
+const hmsCode = h => [h.attr, h.code].map(n => (Number(n) >>> 0).toString(16).toUpperCase().padStart(8, '0')).join('').replace(/(.{4})(?=.)/g, '$1_');
+const hmsLine = (a, errCode = '') => `<div class="meta neg" style="margin-top:4px">⚠️ L'imprimante signale ${a.hms?.length ? a.hms.length + ' alerte' + (a.hms.length > 1 ? 's' : '') : 'une erreur'}${errCode ? ` (code ${errCode})` : ''} : regarde l'écran de l'imprimante ou Bambu Handy.
+  ${(a.hms || []).map(h => `<a href="https://e.bambulab.com/index.php?e=${hmsCode(h).replace(/_/g, '')}&s=device_hms&lang=fr" target="_blank" rel="noopener">${hmsCode(h)}</a>`).join(' · ')}</div>`;
 function liveBox(d, a) {
   const st = a.state || 'IDLE', busy = ['RUNNING', 'PAUSE', 'PREPARE', 'SLICING'].includes(st);
-  if (!busy && st !== 'FAILED') return `<div class="hint" style="margin:4px 0 0">${st === 'FINISH' && a.job ? `✓ Dernière impression terminée : ${esc(a.job)}` : '💤 En veille'}</div>`;
+  // à l'arrêt, l'imprimante garde l'état « échouée » et l'ancien code d'erreur jusqu'à la prochaine impression : simple rappel, pas d'alerte
+  if (!busy) return `<div class="hint" style="margin:4px 0 0">${st === 'FINISH' && a.job ? `✓ Dernière impression terminée : ${esc(a.job)}` : st === 'FAILED' && a.job ? `✗ Dernière impression arrêtée : ${esc(a.job)}` : '💤 En veille'}</div>${a.hms?.length ? hmsLine(a) : ''}`;
   const endD = new Date(Date.now() + (a.remaining || 0) * 60000), end = a.remaining ? (endD.toDateString() === new Date().toDateString() ? '' : endD.getDate() === new Date(Date.now() + 864e5).getDate() ? 'demain ' : endD.toLocaleDateString('fr-FR', {weekday: 'long'}) + ' ') + endD.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}) : '';
   const errCode = a.error ? a.error.toString(16).toUpperCase().padStart(8, '0').replace(/^(.{4})/, '$1_') : '';
   const temps = [...(a.nozzleTemps || []).map((n, i) => `buse${(a.nozzleTemps.length > 1) ? (n.id === 1 ? ' G' : ' D') : ''} ${Math.round(n.temp)}°${n.target ? '/' + n.target + '°' : ''}`), a.bed ? `plateau ${Math.round(a.bed.temp)}°${a.bed.target ? '/' + a.bed.target + '°' : ''}` : ''].filter(Boolean).join(' · ');
@@ -3201,13 +3210,13 @@ function liveBox(d, a) {
   const tasks = [...(bambu?.tasks || []), ...(hist?.tasks || [])].filter(t => t.device === d.id);
   const t = tasks.find(x => x.status === 1) || tasks.find(x => a.job && normTitle(x.title) === normTitle(a.job));
   const img = t?.cover || t?.photo || m?.thumb || '';
-  return `<div class="live${st === 'FAILED' ? ' fail' : ''}"><div class="${img ? 'liveGrid' : ''}">${img ? `<img class="liveImg" src="${esc(img)}" alt="" loading="lazy">` : ''}<div>
+  return `<div class="live${a.hms?.length || a.error ? ' fail' : ''}"><div class="${img ? 'liveGrid' : ''}">${img ? `<img class="liveImg" src="${esc(img)}" alt="" loading="lazy">` : ''}<div>
     <div><b>${esc(a.job || 'Impression')}</b> · ${STATE_FR[st] || st}</div>
     ${a.progress != null ? `<div class="bar"><i style="width:${a.progress}%"></i></div>` : ''}
     <div class="meta">${a.progress != null ? `<b>${a.progress} %</b>` : ''}${a.layers ? ` · couche ${a.layer}/${a.layers}` : ''}${a.remaining ? ` · reste ${dur(a.remaining / 60)} · fin vers ${end}` : ''}</div>
     ${temps ? `<div class="meta">🌡 ${temps}</div>` : ''}
     ${model}
-    ${a.hms?.length || a.error ? `<div class="meta neg" style="margin-top:4px">⚠️ L'imprimante signale ${a.hms?.length ? a.hms.length + ' alerte' + (a.hms.length > 1 ? 's' : '') : 'une erreur'}${errCode ? ` (code ${errCode})` : ''} : regarde l'écran de l'imprimante ou Bambu Handy.</div>` : ''}
+    ${a.hms?.length || a.error ? hmsLine(a, errCode) : ''}
     ${camLink()}
   </div></div></div>`;
 }
