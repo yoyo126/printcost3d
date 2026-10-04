@@ -266,6 +266,13 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .filLine{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
 .filLine:last-child{border-bottom:0}
 .filLine .st{font-size:12.5px;font-weight:650}
+.navRow{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -4px 10px;padding:2px 4px}
+.navRow::-webkit-scrollbar{display:none}
+.navRow button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 13px;font-weight:650;font-size:13.5px;color:var(--muted);white-space:nowrap;cursor:pointer}
+.navRow button.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.navRow.sub button{padding:5px 11px;font-size:12.5px}
+.mFav{position:absolute;right:8px;top:8px;font-size:13px;padding:1px 7px;border-radius:999px;background:var(--card);color:#e0a400;box-shadow:0 2px 6px #0002}
+.favPick{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;display:grid;gap:6px}
 .shopActs{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin:4px 0 14px}
 .shopActs .btn{text-align:center;text-decoration:none}
 .live{margin-top:10px;padding:10px 12px;border-radius:14px;background:var(--brand-soft);font-size:13.5px}
@@ -643,8 +650,10 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   <!-- BOUTIQUE MAKERWORLD -->
   <section id="shop" class="panel">
     <div id="shopList">
+      <div class="navRow" id="shopNav"></div>
       <form class="linkRow" id="shopForm" style="margin:0 0 10px"><input id="shopQ" type="search" placeholder="Rechercher sur MakerWorld : porte-clés, vase, support casque…" enterkeyhint="search"><button class="btn primary">Rechercher</button></form>
-      <div class="toolbar" style="margin-bottom:10px"><label class="check"><input type="checkbox" id="shopSell" checked> Revendables seulement</label><span class="hint" id="shopInfo" style="margin:0"></span></div>
+      <div class="navRow sub" id="shopFolders" hidden></div>
+      <div class="toolbar" style="margin-bottom:10px"><label class="check" id="shopSellBox"><input type="checkbox" id="shopSell" checked> Revendables seulement</label><span class="hint" id="shopInfo" style="margin:0"></span></div>
       <div id="shopResults" class="catGrid"></div>
       <button class="btn" id="shopMore" style="width:100%;margin-top:12px" hidden>Voir plus</button>
     </div>
@@ -3159,44 +3168,78 @@ setInterval(() => {
 }, 60000);
 
 /* ---------- Boutique MakerWorld : chercher, voir le détail, calculer, envoyer vers Bambu Handy ---------- */
-const shop = {q: null, offset: 0, total: 0, hits: [], busy: false, seq: 0};
+const shop = {mode: null, key: '', q: '', folder: 'all', offset: 0, seed: 0, total: 0, more: false, hits: [], busy: false, seq: 0, navs: null, bambu: false, folders: null, err: ''};
 const kNum = n => n >= 1000 ? (n / 1000).toLocaleString('fr-FR', {maximumFractionDigits: 1}) + ' k' : String(n);
-function openShop() {
+// Boutique « comme Bambu Handy » : rubriques (Pour vous, Tendance, catégories…), favoris du compte Bambu, recherche
+async function openShop() {
   if (!cloud.logged) { $('shopResults').innerHTML = cloud.on ? '<p class="hint">⏳ Connexion…</p>' : emptyState('🛍️', 'Boutique MakerWorld', 'Disponible sur la version en ligne, une fois connecté.'); return; }
-  if (shop.q === null && !shop.busy) shopSearch('');
+  if (!shop.navs) {
+    shop.navs = [];
+    const r = await api('/api/makerworld?nav=1').catch(() => null);
+    shop.navs = r?.ok ? r.data.navs : [{key: 'Trending', name: 'Tendance'}]; shop.bambu = !!r?.data?.bambu;
+  }
+  if (!shop.mode) shopGo({mode: 'feed', key: shop.navs.some(n => n.key === 'Foryou') ? 'Foryou' : 'Trending'});
+  else renderShopNav();
 }
-async function shopSearch(q, more = false) {
+function renderShopNav() {
+  const cur = shop.mode === 'fav' ? '★' : shop.mode === 'feed' ? shop.key : '';
+  $('shopNav').innerHTML = [shop.bambu ? `<button type="button" data-nav="★" class="${cur === '★' ? 'on' : ''}">⭐ Favoris</button>` : '',
+    ...(shop.navs || []).map(n => `<button type="button" data-nav="${esc(n.key)}" class="${cur === n.key ? 'on' : ''}">${esc(n.name)}</button>`)].join('');
+  $('shopFolders').hidden = shop.mode !== 'fav' || !shop.folders?.length;
+  if (!$('shopFolders').hidden) $('shopFolders').innerHTML = [`<button type="button" data-folder="all" class="${shop.folder === 'all' ? 'on' : ''}">Tous</button>`,
+    ...shop.folders.map(f => `<button type="button" data-folder="${f.id}" class="${String(shop.folder) === String(f.id) ? 'on' : ''}">${esc(f.name)}${f.count != null ? ` · ${f.count}` : ''}</button>`)].join('');
+  $('shopSellBox').hidden = shop.mode !== 'search';
+}
+function shopGo(o) {
+  Object.assign(shop, {mode: o.mode, key: o.key || '', q: o.q || '', folder: o.folder ?? 'all'});
+  if (o.mode !== 'search') $('shopQ').value = '';
+  renderShopNav(); shopLoad(false);
+}
+async function shopLoad(more) {
   if (more && shop.busy) return;
-  // une nouvelle recherche remplace celle en cours
-  const seq = ++shop.seq;
-  if (!more) { shop.q = q; shop.offset = 0; shop.total = 0; shop.hits = []; $('shopInfo').textContent = ''; $('shopResults').innerHTML = '<p class="hint">⏳ Recherche…</p>'; }
-  shop.busy = true; $('shopMore').disabled = true;
-  const only = $('shopSell').checked; let added = 0, pages = 0; shop.err = '';
+  const seq = ++shop.seq; // une nouvelle demande remplace celle en cours
+  if (!more) { shop.offset = 0; shop.seed = 0; shop.total = 0; shop.hits = []; shop.more = false; $('shopInfo').textContent = ''; $('shopResults').innerHTML = '<p class="hint">⏳ Chargement…</p>'; $('shopMore').hidden = true; }
+  shop.busy = true; $('shopMore').disabled = true; shop.err = '';
+  const only = shop.mode === 'search' && $('shopSell').checked;
+  let added = 0, pages = 0;
   try {
+    if (shop.mode === 'fav' && !shop.folders) {
+      const f = await api('/api/makerworld?folders=1'); if (seq !== shop.seq) return;
+      shop.folders = f.ok ? f.data.folders : null; renderShopNav();
+    }
     do {
-      const r = await api(`/api/makerworld?q=${encodeURIComponent(q)}&offset=${shop.offset}&limit=30${only ? '&sell=1' : ''}`);
+      const what = shop.mode === 'search' ? `q=${encodeURIComponent(shop.q)}${only ? '&sell=1' : ''}` : shop.mode === 'fav' ? `fav=${encodeURIComponent(shop.folder)}` : `feed=${encodeURIComponent(shop.key)}&seed=${shop.seed}`;
+      const r = await api(`/api/makerworld?${what}&offset=${shop.offset}&limit=30`);
       if (seq !== shop.seq) return;
       if (!r.ok) { shop.err = r.data?.error || 'MakerWorld ne répond pas.'; break; }
-      shop.total = r.data.total; shop.offset += 30; pages++;
-      const hits = r.data.hits.filter(h => !only || mwCommercial(h.license));
+      shop.total = r.data.total; shop.seed = r.data.seed ?? shop.seed; shop.offset += 30; pages++;
+      const seen = new Set(shop.hits.map(h => h.id));
+      const hits = r.data.hits.filter(h => !seen.has(h.id) && (!only || mwCommercial(h.license)));
       shop.hits.push(...hits); added += hits.length;
-      if (!r.data.hits.length) break;
-    } while (added < 12 && pages < 6 && shop.offset < shop.total);
+      shop.more = r.data.got >= 30 && shop.offset < shop.total;
+    } while (shop.more && only && added < 12 && pages < 6);
   } catch { if (seq !== shop.seq) return; shop.err = 'Serveur injoignable.'; }
   shop.busy = false; $('shopMore').disabled = false; renderShop();
 }
+const shopBadge = h => h.license == null ? '' : mwCommercial(h.license) ? '<span class="mStock ok">✓ revendable</span>' : '<span class="mStock">usage perso</span>';
 function renderShop() {
-  const only = $('shopSell').checked, list = only ? shop.hits.filter(h => mwCommercial(h.license)) : shop.hits;
-  $('shopInfo').textContent = shop.err ? '⚠️ ' + shop.err : shop.q ? `${shop.total.toLocaleString('fr-FR')} modèles${only ? ' revendables' : ''} sur MakerWorld` : `À la une sur MakerWorld${only ? ' · revendables' : ''}`;
-  $('shopResults').innerHTML = list.map(h => `<div class="mCard" data-mw="${h.id}" style="cursor:pointer">
-      <div class="mImg"><img src="${esc(h.cover)}" alt="" loading="lazy"><span class="mStock ${mwCommercial(h.license) ? 'ok' : ''}">${mwCommercial(h.license) ? '✓ revendable' : 'usage perso'}</span></div>
+  const nav = shop.navs?.find(n => n.key === shop.key), only = $('shopSell').checked;
+  $('shopInfo').textContent = shop.err ? '⚠️ ' + shop.err
+    : shop.mode === 'search' ? `${shop.total.toLocaleString('fr-FR')} modèles${only ? ' revendables' : ''} pour « ${shop.q} »`
+    : shop.mode === 'fav' ? `${shop.total.toLocaleString('fr-FR')} modèle${shop.total > 1 ? 's' : ''} en favori · les mêmes que dans Bambu Handy`
+    : (nav?.name || '') + (shop.hits.some(h => h.license == null) ? ' · la licence s’affiche en ouvrant le modèle' : '');
+  $('shopResults').innerHTML = shop.hits.map(h => `<div class="mCard" data-mw="${h.id}" style="cursor:pointer">
+      <div class="mImg"><img src="${esc(h.cover)}" alt="" loading="lazy">${shopBadge(h)}${h.collected ? '<span class="mFav">★</span>' : ''}</div>
       <div class="mBody"><h4>${esc(h.title)}</h4><div class="meta">par ${esc(h.creator)}</div><div class="meta">♥ ${kNum(h.likes)} · 🖨️ ${kNum(h.prints)}</div></div></div>`).join('')
-    || emptyState('🔍', 'Aucun modèle', only ? 'Aucun modèle revendable trouvé : décoche « Revendables seulement » ou change de mot.' : 'Essaie un autre mot.');
-  $('shopMore').hidden = shop.offset >= shop.total;
+    || (shop.err ? '' : shop.mode === 'fav' ? emptyState('⭐', 'Aucun favori ici', 'Ouvre un modèle et touche « ☆ Favori » pour l’ajouter : il apparaîtra aussi dans Bambu Handy.')
+      : emptyState('🔍', 'Aucun modèle', only && shop.mode === 'search' ? 'Aucun modèle revendable trouvé : décoche « Revendables seulement » ou change de mot.' : 'Essaie une autre rubrique ou un autre mot.'));
+  $('shopMore').hidden = !shop.more;
 }
-$('shopForm').onsubmit = e => { e.preventDefault(); shopSearch($('shopQ').value.trim()); };
-$('shopSell').onchange = () => shopSearch(shop.q || '');
-$('shopMore').onclick = () => shopSearch(shop.q || '', true);
+$('shopForm').onsubmit = e => { e.preventDefault(); const q = $('shopQ').value.trim(); q ? shopGo({mode: 'search', q}) : shopGo({mode: 'feed', key: 'Trending'}); $('shopQ').blur(); };
+$('shopSell').onchange = () => { if (shop.mode === 'search') shopLoad(false); };
+$('shopMore').onclick = () => shopLoad(true);
+$('shopNav').addEventListener('click', e => { const b = e.target.closest('[data-nav]'); if (!b) return; b.dataset.nav === '★' ? shopGo({mode: 'fav'}) : shopGo({mode: 'feed', key: b.dataset.nav}); });
+$('shopFolders').addEventListener('click', e => { const b = e.target.closest('[data-folder]'); if (b) shopGo({mode: 'fav', folder: b.dataset.folder}); });
 $('shopResults').addEventListener('click', e => { const c = e.target.closest('[data-mw]'); if (c) openShopDetail(+c.dataset.mw); });
 
 let sd = null, sdSel = {inst: null, plate: 'all'};
@@ -3205,7 +3248,8 @@ async function openShopDetail(id) {
   $('shopDetail').innerHTML = '<div class="card"><p class="hint" style="margin:0">⏳ Chargement du modèle…</p></div>';
   const r = await api('/api/makerworld?id=' + id).catch(() => null);
   if (!r?.ok || !r.data.instances?.length) { $('shopDetail').innerHTML = `<button class="link" data-back>‹ Retour</button><div class="card"><p class="hint" style="margin:0">${esc(r?.data?.error || 'Ce modèle n’a pas de profil d’impression publié.')}</p></div>`; return; }
-  sd = r.data;
+  sd = r.data; sd.favIds = null; sd.favOpen = false;
+  if (shop.bambu) api('/api/makerworld?collect=' + id).then(f => { if (sd?.id === id && f.ok) { sd.favIds = f.data.favoritesIds; renderShopDetail(); } }).catch(() => {});
   const pick = sd.instances.find(i => i.id === sd.defaultInstanceId) || sd.instances.find(i => i.isDefault) || [...sd.instances].sort((a, b) => b.prints - a.prints)[0];
   sdSel = {inst: pick.id, plate: 'all'}; renderShopDetail();
 }
@@ -3238,6 +3282,9 @@ function renderShopDetail() {
       <div class="gal">${(d.gallery.length ? d.gallery : [d.cover]).map(u => `<img src="${esc(u)}" alt="" loading="lazy">`).join('')}</div>
       <h2 style="margin:0">${esc(d.title)}</h2>
       <div class="meta muted">par ${esc(d.creator)} · ♥ ${kNum(d.likes)} · 🖨️ ${kNum(d.prints)} impressions · ⬇ ${kNum(d.downloads)}</div>
+      ${shop.bambu ? `<button class="btn" data-sfav style="margin-top:10px"${sd.favIds ? '' : ' disabled'}>${!sd.favIds ? '⏳ Favori…' : sd.favIds.length ? '★ Dans tes favoris' : '☆ Ajouter aux favoris'}</button>
+        ${sd.favOpen && shop.folders?.length ? `<div class="favPick"><b style="font-size:14px">Dossiers de favoris</b>${shop.folders.map(f => `<label class="check"><input type="checkbox" data-ffold="${f.id}"${sd.favIds.includes(Number(f.id)) ? ' checked' : ''}> ${esc(f.name)}</label>`).join('')}
+          <div style="display:flex;gap:8px"><button class="btn primary" data-fsave>Enregistrer</button><button class="btn" data-fcancel>Annuler</button></div></div>` : ''}` : ''}
       <div class="licBox ${ok ? 'ok' : 'no'}">${ok ? `✓ Licence ${esc(d.license)} : la vente des impressions est autorisée (cite l’auteur).` : `⚠️ Licence « ${esc(d.license || 'inconnue')} » : usage personnel, la vente des impressions n’est en principe pas autorisée.`}</div>
       ${d.tags.length || d.categories.length ? `<div class="tagRow">${[...d.categories, ...d.tags].slice(0, 8).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>` : ''}
       ${d.summary ? `<details class="fold" style="margin-top:10px"><summary><span><b style="font-size:15px">Description</b></span></summary><p style="white-space:pre-line;margin:0;font-size:14px;line-height:1.5">${esc(d.summary)}</p></details>` : ''}
@@ -3280,6 +3327,9 @@ $('shopDetail').addEventListener('click', e => {
   if (e.target.closest('[data-back]')) { $('shopDetail').hidden = true; $('shopList').hidden = false; return; }
   const ib = e.target.closest('[data-sinst]'); if (ib) { sdSel = {inst: +ib.dataset.sinst, plate: 'all'}; renderShopDetail(); return; }
   const pb = e.target.closest('[data-splate]'); if (pb) { sdSel.plate = pb.dataset.splate; renderShopDetail(); return; }
+  if (e.target.closest('[data-sfav]')) { shopFav(); return; }
+  if (e.target.closest('[data-fcancel]')) { sd.favOpen = false; renderShopDetail(); return; }
+  if (e.target.closest('[data-fsave]')) { shopFavSave([...$('shopDetail').querySelectorAll('[data-ffold]:checked')].map(x => Number(x.dataset.ffold))); return; }
   const inst = sd && sd.instances.find(i => i.id === sdSel.inst);
   if (e.target.closest('[data-sadd]')) {
     const j = mwJob(sd, inst, sdSel.plate), m = {...JSON.parse(JSON.stringify(j)), id: uid(), stock: 0, created: today()};
@@ -3295,6 +3345,24 @@ $('shopDetail').addEventListener('click', e => {
     showTab('calc'); renderMwPicks(); applyMw(true); window.scrollTo({top: 0});
   }
 });
+
+// Favoris du compte Bambu : un seul dossier → bascule directe ; plusieurs → choix des dossiers
+async function shopFav() {
+  if (!shop.folders) { const f = await api('/api/makerworld?folders=1').catch(() => null); if (!f?.ok) return toast('⚠️ ' + (f?.data?.error || 'Favoris illisibles.')); shop.folders = f.data.folders; }
+  if (shop.folders.length > 1) { sd.favOpen = !sd.favOpen; return renderShopDetail(); }
+  if (!shop.folders.length && !sd.favIds.length) return toast('⚠️ Aucun dossier de favoris trouvé sur ton compte.');
+  shopFavSave(sd.favIds.length ? [] : [Number(shop.folders[0].id)]);
+}
+async function shopFavSave(ids) {
+  const id = sd.id, r = await api('/api/makerworld', {method: 'POST', body: {designId: id, favoritesIds: ids}}).catch(() => null);
+  if (!r?.ok) return toast('⚠️ ' + (r?.data?.error || 'Favori non enregistré.'));
+  const was = sd.favIds?.length > 0;
+  sd.favIds = ids; sd.favOpen = false; renderShopDetail();
+  toast(ids.length ? '★ Ajouté à tes favoris (aussi dans Bambu Handy)' : 'Retiré de tes favoris');
+  const h = shop.hits.find(x => x.id === id); if (h) h.collected = ids.length > 0;
+  if (shop.mode === 'fav' && was && !ids.length) { shop.hits = shop.hits.filter(x => x.id !== id); shop.total = Math.max(0, shop.total - 1); }
+  renderShop();
+}
 
 /* ---------- Navigation ---------- */
 function showTab(name) {
