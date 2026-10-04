@@ -2316,17 +2316,27 @@ $('fSpool').ref.addEventListener('input', async e => {
 
 /* ---------- Bilan ---------- */
 /* ---------- Production : tout ce que les imprimantes ont imprimé (historique Bambu) ---------- */
-let hist = null, histAt = 0, prodPer = 'm', prodDev = 'all';
+let histProgress = '', hist = null, histAt = 0, prodPer = 'm', prodDev = 'all';
 async function loadHistory(full = false) {
   if (!cloud.logged) { $('prodCard').hidden = true; return; }
   if (!full && hist && Date.now() - histAt < 300000) { renderProd(); if (!$('secHist').hidden) renderHist(); return; }
   $('prodCard').hidden = false;
   $('prodInfo').textContent = full ? '⏳ Récupération de tout l’historique Bambu…' : '⏳ Chargement…';
   try {
-    const r = await api('/api/bambu?history=' + (full ? 'full' : '1'));
-    if (r.ok && r.data.tasks) { hist = r.data; histAt = Date.now(); if (full) toast(`🏭 ${r.data.fetched} impression${r.data.fetched > 1 ? 's' : ''} lue${r.data.fetched > 1 ? 's' : ''} chez Bambu`); }
-    else if (r.data?.expired) $('prodInfo').textContent = 'Connexion Bambu expirée : reconnecte ton compte dans Filaments.';
-  } catch { $('prodInfo').textContent = 'Serveur injoignable.'; }
+    // complet : par paquets, jusqu'à la toute première impression (le serveur rend la main toutes les ~18 s)
+    let after = '', got = 0, r;
+    for (let i = 0; i < 200; i++) {
+      r = await api('/api/bambu?history=' + (full ? 'full' : '1') + (after ? '&after=' + after : ''));
+      if (!full || !r.ok || r.data?.done !== false) break;
+      got += r.data.fetched || 0; after = r.data.next;
+      histProgress = `⏳ ${got.toLocaleString('fr-FR')}${r.data.total ? ' / ' + r.data.total.toLocaleString('fr-FR') : ''} impressions récupérées…`;
+      $('prodInfo').textContent = histProgress; if (!$('secHist').hidden) renderHist();
+    }
+    histProgress = '';
+    if (r?.ok && r.data.tasks) { hist = r.data; histAt = Date.now(); if (full) toast(`🏭 Historique complet : ${r.data.tasks.length.toLocaleString('fr-FR')} impressions`); }
+    else if (r?.data?.expired) $('prodInfo').textContent = 'Connexion Bambu expirée : reconnecte ton compte dans Filaments.';
+    else if (r?.data?.error) toast('⚠️ ' + r.data.error);
+  } catch { histProgress = ''; $('prodInfo').textContent = 'Serveur injoignable.'; }
   renderProd();
   if (!$('secHist').hidden) renderHist();
   if (trackChipless()) { if (!$('secStock').hidden) renderSpools(); if (!$('secAms').hidden) renderBambu(); }
@@ -2756,7 +2766,15 @@ function renderHist() {
   box.innerHTML = head + (list.length
     ? list.slice(0, histShown).map(taskCard).join('') + (list.length > histShown ? `<button class="btn block" id="hMore" style="margin-top:12px;width:100%">Voir plus (${list.length - histShown} de plus)</button>` : '')
     : '<div class="empty"><span class="big">🕘</span>Aucune impression enregistrée pour l’instant.</div>')
-    + '<p class="hint">Historique gardé dans ton compte. Pour remonter plus loin : Bilan › Production › « Récupérer tout l’historique ».</p>';
+    + histSummary(list);
+}
+// Combien d'impressions sont gardées, depuis quand, par imprimante ; et le bouton pour tout récupérer
+function histSummary(list) {
+  if (histProgress) return `<p class="hint">${histProgress}</p>`;
+  const by = {}; let first = null;
+  for (const t of list) { const n = t.deviceName || hist?.devices?.find(d => d.id === t.device)?.name || 'Autre'; by[n] = (by[n] || 0) + 1; const d = t.start || t.end; if (d && (!first || d < first)) first = d; }
+  return `<div class="toolbar" style="margin-top:12px"><span class="hint" style="margin:0">${list.length.toLocaleString('fr-FR')} impression${list.length > 1 ? 's' : ''} gardée${list.length > 1 ? 's' : ''}${first ? ` depuis le ${new Date(first).toLocaleDateString('fr-FR')}` : ''}${Object.keys(by).length ? ' · ' + Object.entries(by).map(([n, c]) => `${esc(n)} : ${c.toLocaleString('fr-FR')}`).join(' · ') : ''}</span>
+    <button class="btn small" id="hFull">↻ Récupérer tout l’historique</button></div>`;
 }
 $('histCard').addEventListener('change', e => {
   const c = e.target.closest('[data-sel]'); if (!c) return;
@@ -2765,6 +2783,7 @@ $('histCard').addEventListener('change', e => {
 });
 $('histCard').addEventListener('click', async e => {
   if (e.target.closest('#hMore')) { histShown += 20; renderHist(); return; }
+  if (e.target.closest('#hFull')) { e.target.closest('#hFull').disabled = true; await loadHistory(true); renderHist(); return; }
   if (e.target.closest('[data-tsall]')) { toSortAll = !toSortAll; renderHist(); return; }
   const ts2 = e.target.closest('[data-tstock],[data-tcat]');
   if (ts2) {

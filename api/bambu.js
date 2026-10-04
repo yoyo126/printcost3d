@@ -132,29 +132,33 @@ async function storeTasks(tasks) {
             select x->>'id', x, nullif(x->>'end', '')::timestamptz from jsonb_array_elements(${JSON.stringify(tasks)}::jsonb) as x
             on conflict (id) do update set data = excluded.data, ended_at = excluded.ended_at`;
 }
-async function history(full) {
-  let fetched = 0;
+// Historique Bambu. full : récupération complète par paquets (le navigateur rappelle avec « after »
+// tant que « done » est faux), sans limite de nombre et sans dépasser le temps d'une fonction.
+async function history(full, start = null) {
+  let fetched = 0, total = null, next = start, done = true;
   if (full) {
     const [row] = await sql`select token_enc from pc_bambu where id = 1`;
     if (!row?.token_enc) return {connected: false};
-    const token = decrypt(row.token_enc), seen = new Set();
-    let after = null;
-    for (let page = 0; page < 25; page++) {
-      const r = await call(`/v1/user-service/my/tasks?limit=100${after ? `&after=${after}` : ''}`, {token});
+    const token = decrypt(row.token_enc), t0 = Date.now();
+    done = false;
+    while (Date.now() - t0 < 18000) {
+      const r = await call(`/v1/user-service/my/tasks?limit=100${next ? `&after=${next}` : ''}`, {token});
       if (r.status === 401 || r.status === 403) return {connected: false, expired: true};
-      const hits = (r.data?.hits || []).filter(t => !seen.has(String(t.id)));
-      if (!hits.length) break;
-      hits.forEach(t => seen.add(String(t.id)));
-      await storeTasks(hits.map(normTask));
+      if (!r.ok) return {error: `Bambu répond ${r.status}.`, fetched, next, total};
+      total = r.data?.total ?? total;
+      const hits = r.data?.hits || [];
+      if (hits.length) await storeTasks(hits.map(normTask));
       fetched += hits.length;
-      after = hits[hits.length - 1].id;
-      if ((r.data?.hits || []).length < 100) break;
+      const last = hits.length ? String(hits[hits.length - 1].id) : null;
+      if (hits.length < 100 || !last || last === next) { done = true; break; }
+      next = last;
     }
+    if (!done) return {fetched, next, total, done: false};
   }
   const rows = await sql`select data from pc_tasks order by ended_at desc nulls last`;
   const [b] = await sql`select snapshot from pc_bambu where id = 1`;
   const devices = (b?.snapshot?.devices || []).map(d => ({id: d.dev_id, name: d.name, model: d.dev_product_name || d.dev_model_name || ''}));
-  return {tasks: rows.map(r => r.data), devices, fetched};
+  return {tasks: rows.map(r => r.data), devices, fetched, total, done: true};
 }
 
 async function status() {
@@ -192,7 +196,7 @@ export default async function handler(req, res) {
       const [row] = await sql`select account, expires_at, token_enc is not null as linked from pc_bambu where id = 1`;
       return res.json({connected: !!row?.linked, account: row?.account || '', expires: row?.expires_at || null});
     }
-    if (req.method === 'GET') return res.json(req.query?.history ? await history(req.query.history === 'full') : await status());
+    if (req.method === 'GET') return res.json(req.query?.history ? await history(req.query.history === 'full', /^\d+$/.test(req.query.after || '') ? req.query.after : null) : await status());
     if (req.method !== 'POST') return res.status(405).json({error: 'Méthode non autorisée.'});
     if (!sameOrigin(req)) return res.status(403).json({error: 'Origine refusée.'});
     const {action, account = '', password = '', code = '', tfaKey = ''} = req.body || {};
