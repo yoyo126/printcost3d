@@ -83,6 +83,28 @@ async function amsSnapshot(username, token, ids) {
 }
 
 const hex = c => c ? '#' + String(c).slice(0, 6) : '';
+
+// Messages officiels Bambu (HMS + erreurs d'impression) en français, par modèle (3 premiers caractères du numéro de série),
+// comme Bambu Studio : un code absent de la base n'est pas affiché par Bambu non plus.
+const hmsDbs = {};
+async function hmsDb(serial) {
+  const k = String(serial || '').slice(0, 3);
+  const c = hmsDbs[k]; if (c && Date.now() - c.at < 864e5) return c;
+  try {
+    const r = await fetch(`https://e.bambulab.com/query.php?lang=fr${k ? `&d=${encodeURIComponent(k)}` : ''}`, {headers: {'User-Agent': 'Mozilla/5.0'}, signal: AbortSignal.timeout(6000)});
+    const d = (await r.json()).data;
+    const map = list => new Map((list || []).map(x => [String(x.ecode).toUpperCase(), x.intro]));
+    return hmsDbs[k] = {at: Date.now(), hms: map(d.device_hms?.fr), err: map(d.device_error?.fr)};
+  } catch { return c || null; }
+}
+const h8 = n => (Number(n) >>> 0).toString(16).toUpperCase().padStart(8, '0');
+async function explainAlerts(serial, a) {
+  if (!a || (!a.hms?.length && !a.error)) return;
+  const db = await hmsDb(serial);
+  a.hms = (a.hms || []).map(h => { const ecode = h8(h.attr) + h8(h.code); return {...h, ecode, level: (Number(h.code) >>> 16) & 0xFFFF, text: db?.hms.get(ecode) || null}; });
+  if (a.error) a.errorText = db?.err.get(h8(a.error)) || null;
+  a.known = !!db;
+}
 const ZERO = /^0+$/;
 // Emplacement : AMS « A, B, C… » et numéro 1 à 4, comme dans Bambu Studio
 function tray(t, amsId, nozzle) {
@@ -179,6 +201,7 @@ async function status() {
   try { raw = await amsSnapshot(row.username, token, devices.filter(d => d.online).map(d => d.id)); }
   catch (e) { amsError = String(e.message || e).slice(0, 200); }
   for (const d of devices) d.ams = raw[d.id] ? normPrinter(raw[d.id]) : null;
+  await Promise.all(devices.map(d => explainAlerts(d.id, d.ams)));
 
   // Instantané (sans jeton ni code d'accès) pour comprendre la forme réelle des données
   const snap = {at: new Date().toISOString(), devices: (bind.data?.devices || []).map(({dev_access_code, ...d}) => d),

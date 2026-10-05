@@ -3193,13 +3193,21 @@ const STATE_FR = {RUNNING: 'en cours', PAUSE: 'en pause', PREPARE: 'préparation
 // Caméra : la vidéo en direct reste dans Bambu Handy (système vidéo fermé de Bambu) ; ce bouton ouvre l'appli
 const camLink = () => IS_PHONE ? `<a class="camBtn" href="bambulab://bbl">📹 Caméra</a>` : `<div class="hint" style="margin:6px 0 0">📹 Caméra en direct : dans Bambu Handy sur ton téléphone.</div>`;
 // Alerte en cours (HMS = messages actifs de l'imprimante ; code d'erreur seulement pendant une impression)
-const hmsCode = h => [h.attr, h.code].map(n => (Number(n) >>> 0).toString(16).toUpperCase().padStart(8, '0')).join('').replace(/(.{4})(?=.)/g, '$1_');
-const hmsLine = (a, errCode = '') => `<div class="meta neg" style="margin-top:4px">⚠️ L'imprimante signale ${a.hms?.length ? a.hms.length + ' alerte' + (a.hms.length > 1 ? 's' : '') : 'une erreur'}${errCode ? ` (code ${errCode})` : ''} : regarde l'écran de l'imprimante ou Bambu Handy.
-  ${(a.hms || []).map(h => `<a href="https://e.bambulab.com/index.php?e=${hmsCode(h).replace(/_/g, '')}&s=device_hms&lang=fr" target="_blank" rel="noopener">${hmsCode(h)}</a>`).join(' · ')}</div>`;
+// Alertes : seulement les messages qui existent dans la base officielle Bambu (comme Handy / Studio), en français.
+// Gravité 1-2 = alerte rouge ; 3 = simple information ; codes inconnus = messages internes, non affichés.
+const hmsCode = h => (h.ecode || '').replace(/(.{4})(?=.)/g, '$1_');
+const realAlerts = a => (a.hms || []).filter(h => a.known ? h.text : h.level === 1 || h.level === 2);
+const hmsLine = (a, errCode = '') => {
+  const list = realAlerts(a), err = errCode && (a.errorText || !a.known);
+  if (!list.length && !err) return '';
+  return `<div style="margin-top:6px;display:grid;gap:4px">${list.map(h => `<div class="meta ${h.level === 3 ? '' : 'neg'}">${h.level === 3 ? 'ℹ️' : '⚠️'} ${esc(h.text || 'Alerte de l’imprimante')} <a href="https://e.bambulab.com/index.php?e=${esc(h.ecode)}&s=device_hms&lang=fr" target="_blank" rel="noopener">${hmsCode(h)}</a></div>`).join('')}
+    ${err ? `<div class="meta neg">⚠️ ${esc(a.errorText || 'Erreur d’impression')} (code ${errCode})</div>` : ''}</div>`;
+};
+const hasAlarm = (a, busy) => realAlerts(a).some(h => h.level !== 3) || (busy && a.error && (a.errorText || !a.known));
 function liveBox(d, a) {
   const st = a.state || 'IDLE', busy = ['RUNNING', 'PAUSE', 'PREPARE', 'SLICING'].includes(st);
   // à l'arrêt, l'imprimante garde l'état « échouée » et l'ancien code d'erreur jusqu'à la prochaine impression : simple rappel, pas d'alerte
-  if (!busy) return `<div class="hint" style="margin:4px 0 0">${st === 'FINISH' && a.job ? `✓ Dernière impression terminée : ${esc(a.job)}` : st === 'FAILED' && a.job ? `✗ Dernière impression arrêtée : ${esc(a.job)}` : '💤 En veille'}</div>${a.hms?.length ? hmsLine(a) : ''}`;
+  if (!busy) return `<div class="hint" style="margin:4px 0 0">${st === 'FINISH' && a.job ? `✓ Dernière impression terminée : ${esc(a.job)}` : st === 'FAILED' && a.job ? `✗ Dernière impression arrêtée : ${esc(a.job)}` : '💤 En veille'}</div>${hmsLine(a)}`;
   const endD = new Date(Date.now() + (a.remaining || 0) * 60000), end = a.remaining ? (endD.toDateString() === new Date().toDateString() ? '' : endD.getDate() === new Date(Date.now() + 864e5).getDate() ? 'demain ' : endD.toLocaleDateString('fr-FR', {weekday: 'long'}) + ' ') + endD.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}) : '';
   const errCode = a.error ? a.error.toString(16).toUpperCase().padStart(8, '0').replace(/^(.{4})/, '$1_') : '';
   const temps = [...(a.nozzleTemps || []).map((n, i) => `buse${(a.nozzleTemps.length > 1) ? (n.id === 1 ? ' G' : ' D') : ''} ${Math.round(n.temp)}°${n.target ? '/' + n.target + '°' : ''}`), a.bed ? `plateau ${Math.round(a.bed.temp)}°${a.bed.target ? '/' + a.bed.target + '°' : ''}` : ''].filter(Boolean).join(' · ');
@@ -3210,13 +3218,13 @@ function liveBox(d, a) {
   const tasks = [...(bambu?.tasks || []), ...(hist?.tasks || [])].filter(t => t.device === d.id);
   const t = tasks.find(x => x.status === 1) || tasks.find(x => a.job && normTitle(x.title) === normTitle(a.job));
   const img = t?.cover || t?.photo || m?.thumb || '';
-  return `<div class="live${a.hms?.length || a.error ? ' fail' : ''}"><div class="${img ? 'liveGrid' : ''}">${img ? `<img class="liveImg" src="${esc(img)}" alt="" loading="lazy">` : ''}<div>
+  return `<div class="live${hasAlarm(a, true) ? ' fail' : ''}"><div class="${img ? 'liveGrid' : ''}">${img ? `<img class="liveImg" src="${esc(img)}" alt="" loading="lazy">` : ''}<div>
     <div><b>${esc(a.job || 'Impression')}</b> · ${STATE_FR[st] || st}</div>
     ${a.progress != null ? `<div class="bar"><i style="width:${a.progress}%"></i></div>` : ''}
     <div class="meta">${a.progress != null ? `<b>${a.progress} %</b>` : ''}${a.layers ? ` · couche ${a.layer}/${a.layers}` : ''}${a.remaining ? ` · reste ${dur(a.remaining / 60)} · fin vers ${end}` : ''}</div>
     ${temps ? `<div class="meta">🌡 ${temps}</div>` : ''}
     ${model}
-    ${a.hms?.length || a.error ? hmsLine(a, errCode) : ''}
+    ${hmsLine(a, errCode)}
     ${camLink()}
   </div></div></div>`;
 }
