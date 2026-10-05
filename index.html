@@ -270,6 +270,15 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .navRow::-webkit-scrollbar{display:none}
 .navRow button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 13px;font-weight:650;font-size:13.5px;color:var(--muted);white-space:nowrap;cursor:pointer}
 .navRow button.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.profDesc{white-space:pre-line;margin:10px 0 0;font-size:14px;line-height:1.5}
+.gal.small{margin:10px 0 0}.gal.small img{height:110px;border-radius:10px}
+.talk{padding:10px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.talk:last-of-type{border-bottom:0}
+.talkHead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.talkHead img{width:26px;height:26px;border-radius:50%;object-fit:cover}
+.talkHead .muted{margin-left:auto;font-size:12px}
+.stars{color:#e0a400;letter-spacing:1px}
+.talkText{margin-top:4px;white-space:pre-line;line-height:1.45}
 .filtCard{padding:12px 14px;margin-bottom:12px}
 .filtCard h4{margin:10px 0 6px;font-size:13.5px}
 .filtCard h4:first-child{margin-top:0}
@@ -921,6 +930,46 @@ const eurFmt = new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR'}
 const eur = n => eurFmt.format(n || 0);
 const gr = n => `${(Math.abs(n || 0) < 10 && (n || 0) % 1 ? Math.round(n * 10) / 10 : Math.round(n || 0)).toLocaleString('fr-FR')} g`;
 const pct = n => `${(n || 0).toLocaleString('fr-FR', {maximumFractionDigits:1})} %`;
+// Ce qui distingue le profil choisi : description de l'auteur, réglages, photos, note ; puis avis (par profil) et commentaires
+function profAbout(d, inst) {
+  const st = inst.settings, chips = st ? [st.layer && `couche ${fr(Number(st.layer))} mm`, st.walls && `${st.walls} paroi${st.walls > 1 ? 's' : ''}`, st.infill && `remplissage ${st.infill}`].filter(Boolean) : [];
+  return `<div class="card">
+    <h3 class="mwH" style="margin-top:0">À propos de ce profil</h3>
+    <div><b>${esc(inst.title || 'Profil')}</b>${inst.author ? ` <span class="muted">par ${esc(inst.author)}</span>` : ''}</div>
+    <div class="meta">${inst.rating?.count ? `★ <b>${fr(inst.rating.avg)}</b> / 5 · ${kNum(inst.rating.count)} avis · ` : ''}${inst.prints ? `imprimé ${kNum(inst.prints)}×` : ''}${inst.tested ? ' · ✓ testé par l’auteur' : ''}${inst.published ? ` · publié le ${new Date(inst.published).toLocaleDateString('fr-FR')}` : ''}</div>
+    ${chips.length ? `<div class="tagRow">${chips.map(c => `<span class="pill">${esc(c)}</span>`).join('')}</div>` : ''}
+    ${inst.description ? `<p class="profDesc">${esc(inst.description)}</p>` : '<p class="hint">L’auteur n’a pas écrit de description pour ce profil.</p>'}
+    ${inst.photos?.length ? `<div class="gal small">${inst.photos.map(p => `<a href="${esc(p.url)}" target="_blank" rel="noopener"><img src="${esc(p.url)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
+    <h3 class="mwH">Avis sur ce profil${inst.rating?.count ? ` <span class="hint">${kNum(inst.rating.count)}</span>` : ''}</h3>
+    <div id="sdReviews">${talkHtml(sd.talk?.[inst.id])}</div>
+    <details class="fold" id="sdCommentsBox"${sd.talk?.c?.open ? ' open' : ''}><summary><span><b style="font-size:15px">Commentaires du modèle</b></span></summary><div id="sdComments">${talkHtml(sd.talk?.c)}</div></details>
+  </div>`;
+}
+function talkHtml(t) {
+  if (!t) return '<p class="hint">⏳ Chargement…</p>';
+  if (t.err) return `<p class="hint">⚠️ ${esc(t.err)}</p>`;
+  if (!t.hits.length) return '<p class="hint">Rien pour l’instant.</p>';
+  return t.hits.map(h => `<div class="talk">
+      <div class="talkHead">${h.avatar ? `<img src="${esc(h.avatar)}" alt="" loading="lazy">` : ''}<b>${esc(h.user || 'Anonyme')}</b>${h.score != null ? ` <span class="stars">${'★'.repeat(Math.round(h.score))}${'☆'.repeat(Math.max(0, 5 - Math.round(h.score)))}</span>` : ''}<span class="muted">${h.date ? new Date(h.date).toLocaleDateString('fr-FR') : ''}</span></div>
+      ${h.text ? `<div class="talkText">${esc(h.text)}</div>` : ''}
+      ${h.reasons?.length ? `<div class="meta neg">${h.reasons.map(esc).join('<br>')}</div>` : ''}
+      ${h.images?.length ? `<div class="gal small">${h.images.map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
+      ${h.likes || h.replies ? `<div class="meta">${h.likes ? `👍 ${h.likes}` : ''}${h.replies ? ` · ${h.replies} réponse${h.replies > 1 ? 's' : ''}` : ''}</div>` : ''}
+    </div>`).join('') + (t.hits.length < t.total ? `<button type="button" class="btn" data-tmore="${t.key}" style="width:100%;margin-top:8px"${t.busy ? ' disabled' : ''}>Voir plus (${(t.total - t.hits.length).toLocaleString('fr-FR')})</button>` : '');
+}
+async function loadTalk(key, more = false) {
+  const d = sd; if (!d) return;
+  const t = (d.talk ||= {})[key] ||= {key, hits: [], total: 0, busy: false};
+  if (t.busy || (!more && t.loaded)) return;
+  t.busy = true;
+  const r = await api(`/api/makerworld?talk=${d.id}${key === 'c' ? '' : '&inst=' + key}&offset=${t.hits.length}`).catch(() => null);
+  t.busy = false; t.loaded = true;
+  if (r?.ok) { t.hits.push(...r.data.hits); t.total = r.data.total; t.err = ''; } else t.err = r?.data?.error || 'Avis illisibles.';
+  if (sd !== d) return;
+  const box = $(key === 'c' ? 'sdComments' : 'sdReviews');
+  if (box && (key === 'c' || String(sdSel.inst) === String(key))) box.innerHTML = talkHtml(t);
+}
+
 // Lien qui ouvre directement Bambu Handy sur le modèle et le profil (le même que le bouton « Ouvrir dans Bambu Handy » de MakerWorld)
 const IS_PHONE = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const handyLink = (designId, instId) => `bambulab://bbl/design/model/detail?design_id=${designId}${instId ? `&instance_id=${instId}` : ''}`;
@@ -3421,6 +3470,7 @@ function mwJob(d, inst, pv) {
   return j;
 }
 function renderShopDetail() {
+  setTimeout(() => loadTalk(String(sdSel.inst)), 0);
   const d = sd, inst = d.instances.find(i => i.id === sdSel.inst), j = mwJob(d, inst, sdSel.plate), c = computeCost(j), p = modelPrice(j, c);
   const ok = mwCommercial(d.license), mine = state.printers.map(x => prCode(x.name).split(' ')[0]).filter(Boolean);
   const compat = mine.map(code => `${inst.compat.some(x => x.toUpperCase() === code || x.toUpperCase().startsWith(code)) ? '✓' : '✗'} ${esc(code)}`).join(' · ');
@@ -3446,10 +3496,11 @@ function renderShopDetail() {
         ${i.cover ? `<img src="${esc(i.cover)}" alt="" loading="lazy">` : '<span class="ph2">🧊</span>'}
         <b>${esc(i.title || 'Profil')}</b><span class="st"><strong>${dur(i.seconds / 3600)}</strong> · <strong>${gr(i.grams)}</strong></span>
         <span class="st">${dots(i.filaments)} ${i.filaments.length} couleur${i.filaments.length > 1 ? 's' : ''}${i.ams ? ' · AMS' : ''}</span>
-        <span class="st">${esc(i.printer || '')}${i.prints ? ` · imprimé ${kNum(i.prints)}×` : ''}</span></button>`).join('')}</div>
+        <span class="st">${esc(i.printer || '')}${i.prints ? ` · imprimé ${kNum(i.prints)}×` : ''}</span>${i.rating?.count ? `<span class="st">★ ${fr(i.rating.avg)} (${kNum(i.rating.count)} avis)</span>` : ''}</button>`).join('')}</div>
       ${inst.plates.length > 1 ? `<h3 class="mwH">Plateau</h3><div class="pickRow"><button type="button" class="pick plate${sdSel.plate === 'all' ? ' on' : ''}" data-splate="all">${inst.cover ? `<img src="${esc(inst.cover)}" alt="" loading="lazy">` : '<span class="ph2">🧊</span>'}<b>Tout le profil</b><span class="st"><strong>${dur(inst.seconds / 3600)}</strong> · <strong>${gr(inst.grams)}</strong></span></button>
         ${inst.plates.map((pl, k) => `<button type="button" class="pick plate${sdSel.plate === String(k) ? ' on' : ''}" data-splate="${k}">${pl.thumb ? `<img src="${esc(pl.thumb)}" alt="" loading="lazy">` : '<span class="ph2">▦</span>'}<b>Plateau ${pl.index}${pl.name ? ' · ' + esc(pl.name) : ''}</b><span class="st"><strong>${dur(pl.seconds / 3600)}</strong> · <strong>${gr(pl.grams)}</strong></span></button>`).join('')}</div>` : ''}
     </div>
+    ${profAbout(d, inst)}
     <div class="shopActs">
       ${IS_PHONE ? `<a class="btn primary" href="${esc(handyLink(d.id, inst.id))}">📱 Imprimer avec Bambu Handy</a>` : `<a class="btn primary" href="${esc(j.link)}" target="_blank" rel="noopener">🌐 Ouvrir sur MakerWorld</a>`}
       <button class="btn" data-sadd>➕ Catalogue</button>
@@ -3474,8 +3525,14 @@ function renderShopDetail() {
     </div>
     <p class="hint">${IS_PHONE ? `📱 « Imprimer avec Bambu Handy » ouvre directement ce profil dans Bambu Handy : choisis l’imprimante et lance. <a href="${esc(j.link)}" target="_blank" rel="noopener">Page MakerWorld</a>` : '📱 Sur ton téléphone, ce bouton ouvre directement le profil dans Bambu Handy pour lancer l’impression.'}</p>`;
 }
+$('shopDetail').addEventListener('toggle', e => {
+  if (e.target.id !== 'sdCommentsBox' || !sd) return;
+  if (e.target.open) loadTalk('c');
+  if (sd.talk?.c) sd.talk.c.open = e.target.open; // garde la section ouverte quand on change de profil
+}, true);
 $('shopDetail').addEventListener('click', e => {
   if (e.target.closest('[data-back]')) { $('shopDetail').hidden = true; $('shopList').hidden = false; return; }
+  const tm = e.target.closest('[data-tmore]'); if (tm) { tm.disabled = true; loadTalk(tm.dataset.tmore, true); return; }
   const ib = e.target.closest('[data-sinst]'); if (ib) { sdSel = {inst: +ib.dataset.sinst, plate: 'all'}; renderShopDetail(); return; }
   const pb = e.target.closest('[data-splate]'); if (pb) { sdSel.plate = pb.dataset.splate; renderShopDetail(); return; }
   if (e.target.closest('[data-sfav]')) { shopFav(); return; }

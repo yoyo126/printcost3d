@@ -105,6 +105,22 @@ async function setCollect(req, res) {
   res.json({ok: true, favoritesIds});
 }
 
+// Avis d'un profil (note, texte traduit, photos) ou commentaires du modèle
+async function talk(req, res) {
+  const designId = String(req.query.talk).replace(/\D/g, ''), inst = String(req.query.inst || '').replace(/\D/g, '');
+  const offset = Math.max(0, parseInt(req.query.offset) || 0), kind = inst ? 2 : 1;
+  const r = await mw(`/comment-service/commentandrating?designId=${designId}&offset=${offset}&limit=10&sort=0&type=${kind}${inst ? `&instanceId=${inst}` : ''}`, null);
+  if (!r.ok) return fail(res, r, 'Avis');
+  const img = l => (l || []).map(x => typeof x === 'string' ? x : x?.url).filter(Boolean).slice(0, 8);
+  res.json({total: r.data?.total || 0, hits: (r.data?.hits || []).map(h => {
+    const x = h.ratingItem || h.comment; if (!x) return null;
+    const u = x.creator || x.user || {};
+    return {id: x.id, kind: h.ratingItem ? 'avis' : 'commentaire', score: x.score ?? null, text: (x.contentTranslated || x.content || '').trim().slice(0, 1500),
+      reasons: (x.lowScoreDetails || []).map(d => [d.reason, d.reasonDescription].filter(Boolean).join(' : ')).filter(Boolean).slice(0, 3),
+      images: img(x.images), user: u.name || '', avatar: u.avatar || '', date: x.createTime || '', likes: x.likeCount || 0, replies: x.replyCount || 0};
+  }).filter(Boolean)});
+}
+
 // Recherche MakerWorld (même moteur que l'appli Bambu)
 async function search(req, res) {
   const q = String(req.query.q || '').slice(0, 100), offset = Math.max(0, parseInt(req.query.offset) || 0), limit = Math.min(40, parseInt(req.query.limit) || 24);
@@ -124,6 +140,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'POST') return await setCollect(req, res);
     if (req.query?.q != null) return await search(req, res);
+    if (req.query?.talk != null) return await talk(req, res);
     if (['nav', 'feed', 'folders', 'fav', 'collect'].some(k => req.query?.[k] != null)) return await browse(req, res);
   } catch (e) { console.error('makerworld', e.message); return res.status(502).json({error: 'Impossible de joindre MakerWorld.'}); }
   const id = String(req.query?.id || '').replace(/\D/g, '');
@@ -146,6 +163,12 @@ export default async function handler(req, res) {
         pictures: (i.pictures || []).map(x => x.url).filter(Boolean),
         compat: [...new Set([mi.compatibility?.devProductName, ...(mi.otherCompatibility || []).map(c => c.devProductName)].filter(Boolean))],
         prints: Number(i.printCount) || 0, ams: !!i.needAms,
+        // ce qui distingue ce profil : description de l'auteur, réglages, photos, note
+        description: text(i.summaryTranslated || i.summary).slice(0, 2000), author: i.instanceCreator?.name || '', published: i.publishTime || i.createTime || '',
+        settings: mi.projectSettings ? {layer: mi.projectSettings.layerHeight || '', walls: mi.projectSettings.wallLoops || '', infill: mi.projectSettings.sparseInfillDensity || ''} : null,
+        photos: [...(i.pictures || []).map(x => ({url: x.url, real: !!x.isRealLifePhoto})), ...(mi.auxiliaryPictures || []).map(x => ({url: x.url || x, real: false}))].filter(x => typeof x.url === 'string' && x.url).slice(0, 20),
+        rating: {count: Number(i.ratingCount) || 0, avg: Number(i.ratingCount) ? Math.round(Number(i.ratingScoreTotal) / Number(i.ratingCount) * 10) / 10 : null},
+        tested: !!i.extention?.instanceSetting?.isPrinterTested,
         plates: (mi.plates || []).map(p => ({index: p.index, name: p.name || '', seconds: Number(p.prediction) || 0, grams: Number(p.weight) || 0,
           thumb: p.thumbnail?.url || p.pick_picture?.url || p.top_picture?.url || '',
           objects: (p.objects || []).length, filaments: (p.filaments || []).map(fil)})),
