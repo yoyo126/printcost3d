@@ -974,6 +974,8 @@ async function loadTalk(key, more = false) {
 const IS_PHONE = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const handyLink = (designId, instId) => `bambulab://bbl/design/model/detail?design_id=${designId}${instId ? `&instance_id=${instId}` : ''}`;
 const handyFromLink = url => { const m = /makerworld\.com\/[^#?]*models\/(\d+)(?:.*profileId-(\d+))?/.exec(url || ''); return m ? handyLink(m[1], m[2]) : null; };
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const dur = h => { const t = Math.round((h || 0) * 60), H = Math.floor(t / 60), M = t % 60; return H ? `${H} h ${String(M).padStart(2, '0')}` : `${M} min`; };
 const monthLabel = k => { const [y, m] = k.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', {month:'long', year:'numeric'}); };
 const monthShort = k => { const [y, m] = k.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', {month:'short'}).replace('.', ''); };
@@ -2332,7 +2334,14 @@ function trackChipless() {
     const [dev, idx] = sp.amsLoc.split(':'), from = sp.trackExact ? Date.parse(sp.trackFrom) : dayStart(sp.trackFrom);
     let used = 0;
     for (const t of tasks.values()) {
-      const end = Date.parse(t.end || t.start || ''); if (!end || t.device !== dev || t.status === 1 || end <= from) continue;
+      // impression en cours : ce qui est déjà imprimé (avancement lu sur l'imprimante)
+      if (t.status === 1) {
+        const live = bambu?.devices?.find(d => d.id === t.device)?.ams;
+        const k = live && ['RUNNING', 'PAUSE'].includes(live.state) && normTitle(live.job) === normTitle(t.title) ? (live.progress || 0) / 100 : 0;
+        if (k && Date.parse(t.start || '') > from) for (const m of t.ams || []) if (String(m.index) === idx) used += num(m.weight) * k;
+        continue;
+      }
+      const end = Date.parse(t.end || t.start || ''); if (!end || t.device !== dev || end <= from) continue;
       for (const m of t.ams || []) if (String(m.index) === idx) used += num(m.weight) * (taskPart(t) ?? 1); // arrêtée : seulement la partie imprimée
     }
     const rem = Math.round((num(sp.trackBase) - used) * 10) / 10;
@@ -2759,6 +2768,8 @@ async function loadBambu(force = false) {
   bambuLoading = false; bambuAt = Date.now();
   await catLoad('Bambu Lab').catch(() => {});
   if (!hist && bambu?.connected) await loadHistory().catch(() => {});
+  // une fois : relire tout l'historique pour corriger les emplacements AMS déjà enregistrés (nouveau format Bambu)
+  if (bambu?.connected && !lsGet('pc3d-hist-slots2')) { lsSet('pc3d-hist-slots2', '1'); loadHistory(true).then(() => { syncAmsToSpools(); trackChipless(); renderAll(); }).catch(() => {}); }
   syncAmsToSpools(); if (trackChipless() && !$('secStock').hidden) renderSpools();
   autoStockFromTasks(); renderBambu(); renderAlert();
 }
@@ -2793,7 +2804,7 @@ function renderBambu() {
       ${units || `<p class="hint" style="margin:6px 0 0">${d.online ? 'AMS non lu.' : 'Imprimante hors ligne : AMS non lu.'}</p>`}</div>`;
   }).join('') || '<p class="hint">Aucune imprimante trouvée sur ce compte.</p>';
   const unlinked = allTrays().filter(({t, dev}) => !t.empty && !spoolForTray(t, dev)).length;
-  box.innerHTML = head + `<p class="hint" style="margin-top:0">Compte ${esc(bambu.account || '')}${bambu.expires ? ` · accès valable jusqu’au ${fmtDate(new Date(bambu.expires).toLocaleDateString('sv'))}` : ''} · <button class="link" id="bLogout">Déconnecter</button></p>
+  box.innerHTML = head + `<p class="hint" style="margin-top:0">${bambu.readAt ? `Lu à ${new Date(bambu.readAt).toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})} · ` : ''}Compte ${esc(bambu.account || '')}${bambu.expires ? ` · accès valable jusqu’au ${fmtDate(new Date(bambu.expires).toLocaleDateString('sv'))}` : ''} · <button class="link" id="bLogout">Déconnecter</button></p>
     ${unlinked ? `<div class="notice" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🧵 ${unlinked} bobine${unlinked > 1 ? 's' : ''} de l’AMS pas encore dans ton stock. <button class="btn small primary" id="bAddAll">Tout ajouter au stock</button></div>` : ''}
     ${devs}
     ${bambu.amsError ? `<div class="notice warn">AMS non lu : ${esc(bambu.amsError)}</div>` : ''}

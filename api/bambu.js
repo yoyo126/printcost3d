@@ -51,6 +51,22 @@ function loginError(r) {
 }
 
 /* AMS : on demande l'état complet (« pushall ») à chaque imprimante en ligne, par le MQTT du cloud */
+// Fusionne un message de l'imprimante dans l'état connu : AMS et emplacements fusionnés un par un
+function mergeReport(prev, p) {
+  const next = {...prev, ...p};
+  if (prev.ams && p.ams) {
+    next.ams = {...prev.ams, ...p.ams};
+    if (Array.isArray(prev.ams.ams) && Array.isArray(p.ams.ams)) {
+      next.ams.ams = prev.ams.ams.map(u => {
+        const nu = p.ams.ams.find(x => String(x.id) === String(u.id)); if (!nu) return u;
+        const trays = Array.isArray(u.tray) && Array.isArray(nu.tray) ? u.tray.map(t => ({...t, ...(nu.tray.find(x => String(x.id) === String(t.id)) || {})})) : (nu.tray || u.tray);
+        return {...u, ...nu, tray: trays};
+      });
+      for (const nu of p.ams.ams) if (!next.ams.ams.some(u => String(u.id) === String(nu.id))) next.ams.ams.push(nu);
+    }
+  }
+  return next;
+}
 async function amsSnapshot(username, token, ids) {
   if (!ids.length || !username) return {};
   const client = await mqtt.connectAsync(MQTT_HOST, {
@@ -65,9 +81,10 @@ async function amsSnapshot(username, token, ids) {
         try {
           const p = JSON.parse(buf.toString()).print;
           const id = topic.split('/')[1];
-          if (p && (p.ams || p.vt_tray || p.vir_slot)) {
-            out[id] = {...(out[id] || {}), ...p};
-            if (ids.every(x => out[x]?.ams || out[x]?.vt_tray || out[x]?.vir_slot)) { clearTimeout(timer); resolve(); }
+          if (p) {
+            out[id] = mergeReport(out[id] || {}, p);
+            // on attend un état complet de chaque imprimante (la liste des emplacements de l'AMS)
+            if (ids.every(x => out[x]?.ams?.ams?.length || out[x]?.vt_tray)) { clearTimeout(timer); resolve(); }
           }
         } catch {}
       });
@@ -137,14 +154,25 @@ export function normPrinter(p = {}) {
 }
 
 // Impression de l'historique Bambu, en version courte
+// Emplacement utilisé : les firmwares récents donnent amsId + slotId (le champ « ams » n'est plus AMS × 4 + emplacement).
+// 254/255 = bobine externe. Même numérotation que les emplacements lus sur l'imprimante (AMS × 4 + emplacement).
+function slotOf(m) {
+  const a = Number(m.amsId), s = Number(m.slotId);
+  if (m.amsId != null && m.slotId != null && Number.isFinite(a) && Number.isFinite(s)) {
+    if (a >= 254) return {index: 'ext', letter: 'Ext'};
+    return {index: a * 4 + s, letter: (a < 26 ? String.fromCharCode(65 + a) : 'HT' + (a - 127)) + (s + 1)};
+  }
+  const g = m.ams; if (g == null) return {index: null, letter: ''};
+  return {index: g, letter: g < 64 ? String.fromCharCode(65 + Math.floor(g / 4)) + (g % 4 + 1) : ''};
+}
 function normTask(t) {
   return {
     id: String(t.id), title: t.title || t.designTitle || '', device: t.deviceId, deviceName: t.deviceName || '',
     status: t.status, start: t.startTime || null, end: t.endTime || null, weight: Number(t.weight) || 0, minutes: Math.round((Number(t.costTime) || 0) / 60),
     plate: t.plateIndex ?? null, cover: t.cover || '', photo: t.snapShot || '',
     // « ams » = numéro global de l'emplacement (AMS × 4 + emplacement) ; targetColor = couleur de la bobine utilisée
-    ams: (t.amsDetailMapping || []).map(m => ({type: m.filamentType || m.targetFilamentType || '', color: hex(m.targetColor || m.sourceColor),
-      weight: Number(m.weight) || 0, index: m.ams ?? null, letter: m.ams != null && m.ams < 64 ? String.fromCharCode(65 + Math.floor(m.ams / 4)) + (m.ams % 4 + 1) : '', nozzle: m.nozzleId ?? null})),
+    ams: (t.amsDetailMapping || []).map(m => { const at = slotOf(m); return {type: m.filamentType || m.targetFilamentType || '', color: hex(m.targetColor || m.sourceColor),
+      weight: Number(m.weight) || 0, index: at.index, letter: at.letter, nozzle: m.nozzleId ?? null}; }),
   };
 }
 // L'historique est gardé dans la base : il s'accumule au fil des lectures
@@ -192,7 +220,7 @@ async function status() {
   if (!bind.ok) return {connected: true, account: row.account, error: loginError(bind)};
   const devices = (bind.data?.devices || []).map(d => ({id: d.dev_id, name: d.name, model: d.dev_product_name || d.dev_model_name || '', online: !!d.online, status: d.print_status || ''}));
 
-  const tasksR = await call('/v1/user-service/my/tasks?limit=30', {token});
+  const tasksR = await call('/v1/user-service/my/tasks?limit=30&offset=0&status=0', {token});
   const hits = tasksR.data?.hits || [];
   const tasks = hits.map(normTask);
   await storeTasks(tasks);
@@ -207,7 +235,7 @@ async function status() {
   const snap = {at: new Date().toISOString(), devices: (bind.data?.devices || []).map(({dev_access_code, ...d}) => d),
     tasks: hits.slice(0, 5).map(({cover, ...t}) => t), amsRaw: raw, amsError, tasksStatus: tasksR.status};
   await sql`update pc_bambu set snapshot = ${JSON.stringify(snap)}::jsonb where id = 1`;
-  return {connected: true, account: row.account, expires: row.expires_at, devices, tasks, amsError};
+  return {connected: true, account: row.account, expires: row.expires_at, devices, tasks, amsError, readAt: new Date().toISOString()};
 }
 
 export default async function handler(req, res) {
