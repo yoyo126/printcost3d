@@ -2284,7 +2284,7 @@ function trackChipless() {
     let used = 0;
     for (const t of tasks.values()) {
       const end = Date.parse(t.end || t.start || ''); if (!end || t.device !== dev || t.status === 1 || end <= from) continue;
-      for (const m of t.ams || []) if (String(m.index) === idx) used += num(m.weight);
+      for (const m of t.ams || []) if (String(m.index) === idx) used += num(m.weight) * (taskPart(t) ?? 1); // arrêtée : seulement la partie imprimée
     }
     const rem = Math.round((num(sp.trackBase) - used) * 10) / 10;
     if (sp.remaining !== rem || sp.trackUsed !== used) { sp.remaining = rem; sp.trackUsed = Math.round(used * 10) / 10; changed = true; }
@@ -2351,10 +2351,20 @@ async function loadHistory(full = false) {
 const periodKey = (d, p) => { const y = d.slice(0, 4), m = +d.slice(5, 7); return p === 'm' ? d.slice(0, 7) : p === 't' ? `${y}-T${Math.ceil(m / 3)}` : p === 's' ? `${y}-S${m <= 6 ? 1 : 2}` : y; };
 const periodLabel = (k, p) => p === 'm' ? monthLabel(k) : p === 't' ? `${k.slice(-1) === '1' ? '1er' : k.slice(-1) + 'e'} trimestre ${k.slice(0, 4)}` : p === 's' ? `${k.slice(-1) === '1' ? '1er' : '2e'} semestre ${k.slice(0, 4)}` : k;
 // Coût de production d'une impression : filament + électricité + machine (amortissement + maintenance), sans main-d'œuvre
+// Impression arrêtée (statut 3 = échouée OU arrêtée à la main) : Bambu garde le poids et la durée prévus pour tout le fichier.
+// La part réellement imprimée = durée réelle / durée prévue (null si l'impression n'a pas été arrêtée).
+function taskPart(t) {
+  if (t.status !== 3 && t.status !== 4) return null;
+  const real = t.start && t.end ? (new Date(t.end) - new Date(t.start)) / 60000 : null;
+  if (real == null || !(t.minutes > 0)) return null;
+  return Math.max(0, Math.min(1, real / t.minutes));
+}
+// Arrêtée à 97 % ou plus : l'impression est considérée comme terminée
+function taskOk(t) { return t.status === 2 || (taskPart(t) ?? 0) >= .97; }
 function taskCost(t) {
   const j = taskToJob(t, true); j.prepMin = 0; j.finishMin = 0; j.packaging = 0; j.asm = defaultAsm();
-  const c = computeCost(j);
-  return {material: c.material, power: c.power, machine: c.machine + c.maint, total: c.material + c.power + c.machine + c.maint, grams: c.grams, h: c.h, printer: j.printerId};
+  const c = computeCost(j), k = taskPart(t) ?? 1;
+  return {material: c.material * k, power: c.power * k, machine: (c.machine + c.maint) * k, total: (c.material + c.power + c.machine + c.maint) * k, grams: c.grams * k, h: c.h * k, printer: j.printerId, part: taskPart(t)};
 }
 function renderProd() {
   const box = $('prodBody'); if (!hist) return;
@@ -2370,7 +2380,7 @@ function renderProd() {
   const done = prodDev === 'all' ? all : all.filter(t => t.device === prodDev);
   const groups = new Map();
   for (const t of done) {
-    const k = periodKey(String(t.end || t.start).slice(0, 10), prodPer), c = taskCost(t), ok = t.status === 2;
+    const k = periodKey(String(t.end || t.start).slice(0, 10), prodPer), c = taskCost(t), ok = taskOk(t);
     const g = groups.get(k) || {n: 0, h: 0, grams: 0, material: 0, power: 0, machine: 0, total: 0, failN: 0, failCost: 0};
     if (ok) { g.n++; g.h += c.h; g.grams += c.grams; g.material += c.material; g.power += c.power; g.machine += c.machine; g.total += c.total; }
     else { g.failN++; g.failCost += c.total; }
@@ -2394,7 +2404,7 @@ $('prodDev').addEventListener('click', e => { const b = e.target.closest('[data-
 function prodCompare(all, devs) {
   const rows = devs.map(d => {
     const r = {name: d.name, n: 0, h: 0, grams: 0, total: 0, failN: 0};
-    for (const t of all.filter(x => x.device === d.id)) { const c = taskCost(t); if (t.status === 2) { r.n++; r.h += c.h; r.grams += c.grams; r.total += c.total; } else r.failN++; }
+    for (const t of all.filter(x => x.device === d.id)) { const c = taskCost(t); if (taskOk(t)) { r.n++; r.h += c.h; r.grams += c.grams; r.total += c.total; } else r.failN++; }
     return r;
   }).filter(r => r.n || r.failN);
   if (rows.length < 2) return '';
@@ -2758,10 +2768,18 @@ $('spoolSeg').addEventListener('click', e => {
   renderSpoolsTab();
 });
 const devNameOf = id => (bambu?.devices || hist?.devices || []).find(d => d.id === id)?.name || '';
-// Coût de l'impression : filament (prix des bobines utilisées) + électricité + usure de l'imprimante
+// Durée, poids et état : pour une impression arrêtée, ce qui a vraiment été imprimé
+function taskLine(t) {
+  const p = taskPart(t);
+  if (p == null) return `${t.minutes ? ' · ' + dur(t.minutes / 60) : ''} · <b>${gr(t.weight)}</b> · ${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}`;
+  return ` · ${dur(t.minutes * p / 60)} · <b>≈ ${gr(t.weight * p)}</b> sur ${gr(t.weight)} · ${p >= .97 ? 'arrêtée à la toute fin' : `arrêtée à ${Math.round(p * 100)} %`}`;
+}
+// Coût de l'impression : filament (prix des bobines utilisées) + électricité + usure de l'imprimante.
+// En cours = coût prévu ; arrêtée avant la fin = coût de la partie imprimée (perdue)
 function taskCostLine(t) {
   if (!(t.weight > 0)) return '';
-  const c = taskCost(t), lost = t.status === 3 || t.status === 4;
+  const c = taskCost(t), lost = !taskOk(t) && t.status !== 1 && t.status !== 2;
+  if (lost && c.total < .01) return `<div class="tCost">💶 Arrêtée tout de suite : rien de perdu</div>`;
   return `<div class="tCost${lost ? ' lost' : ''}">💶 ${t.status === 1 ? 'Coût prévu' : lost ? 'Coût perdu' : 'Coût'} <b>${eur(c.total)}</b><span>filament ${eur(c.material)} · électricité ${eur(c.power)} · usure machine ${eur(c.machine)}</span></div>`;
 }
 const taskCard = t => `<div class="task${selTasks.has(t.id) ? ' sel' : ''}">
@@ -2769,10 +2787,10 @@ const taskCard = t => `<div class="task${selTasks.has(t.id) ? ' sel' : ''}">
     ${taskImg(t)}<div style="min-width:0">
     <div class="tTitle">${esc((t.title || 'Impression').replace(/_/g, ' ').replace(/\s+/g, ' ').trim())}</div>
     ${state.taskSold?.[t.id] || state.taskDone?.[t.id] === 'stock' ? `<div class="hint" style="margin:3px 0 0">${[state.taskDone?.[t.id] === 'stock' ? '✓ ajoutée au stock' : '', state.taskSold?.[t.id] ? '✓ vendue' : ''].filter(Boolean).join(' · ')}</div>` : ''}
-    <div class="hint" style="margin:2px 0 0">${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) + ' · ' : ''}${esc(t.deviceName || devNameOf(t.device))}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''} · <b>${gr(t.weight)}</b> · ${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</div>
+    <div class="hint" style="margin:2px 0 0">${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) + ' · ' : ''}${esc(t.deviceName || devNameOf(t.device))}${taskLine(t)}</div>
     ${taskCostLine(t)}
     <div class="trays" style="margin-top:6px">${(t.ams || []).map(m => `<span class="tray"><span class="dot" style="background:${esc(m.color || '#999')}"></span>${esc(m.letter || m.type)} · ${gr(m.weight)}</span>`).join('')}</div>
-    ${t.weight > 0 ? `<div class="tActs"><button class="btn small" data-tsell="${esc(t.id)}">Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">Calculer</button>${t.status === 2 ? `<button class="btn small" data-tstock="${esc(t.id)}">Ajouter au stock</button>` : ''}${suggestModel(t)?.sure ? '' : `<button class="btn small" data-tcat="${esc(t.id)}">Ajouter au catalogue</button>`}</div>` : ''}
+    ${t.weight > 0 ? `<div class="tActs"><button class="btn small" data-tsell="${esc(t.id)}">Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">Calculer</button>${taskOk(t) ? `<button class="btn small" data-tstock="${esc(t.id)}">Ajouter au stock</button>` : ''}${suggestModel(t)?.sure ? '' : `<button class="btn small" data-tcat="${esc(t.id)}">Ajouter au catalogue</button>`}</div>` : ''}
   </div></div>`;
 function renderHist() {
   const box = $('histCard'), list = hist?.tasks || bambu?.tasks || [];
@@ -2859,7 +2877,7 @@ function addTaskToStock(t, modelId, qty = null) {
   (state.taskDone ||= {})[t.id] = 'stock';
 }
 let toSortAll = false;
-const toSortList = () => !state.autoStockFrom ? [] : allTasks().filter(t => t.status === 2 && !state.taskDone?.[t.id] && Date.parse(t.end || t.start || 0) >= Date.parse(state.autoStockFrom));
+const toSortList = () => !state.autoStockFrom ? [] : allTasks().filter(t => taskOk(t) && !state.taskDone?.[t.id] && Date.parse(t.end || t.start || 0) >= Date.parse(state.autoStockFrom));
 function autoStockFromTasks() {
   if (!cloud.logged) return false;
   if (!state.autoStockFrom) { state.autoStockFrom = new Date(Date.now() - 7 * 864e5).toISOString(); save(); }
