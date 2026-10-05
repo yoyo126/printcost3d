@@ -406,6 +406,10 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 .dotBig{width:22px;height:22px;border-radius:50%;box-shadow:0 0 0 1.5px var(--line);flex:none}
 .slot .name{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .slot .cname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tCost{margin-top:4px;font-size:13.5px}
+.tCost b{font-family:var(--display);font-size:15px}
+.tCost span{color:var(--muted);display:block;font-size:12.5px}
+.tCost.lost b{color:var(--bad)}
 .slot .ref{color:var(--muted);font-size:12px;font-weight:650}
 .slot .g{font-family:var(--display);font-weight:800;font-size:16px}
 .slot .link{font-size:12px;padding:4px 0;text-align:left}
@@ -2754,12 +2758,19 @@ $('spoolSeg').addEventListener('click', e => {
   renderSpoolsTab();
 });
 const devNameOf = id => (bambu?.devices || hist?.devices || []).find(d => d.id === id)?.name || '';
+// Coût de l'impression : filament (prix des bobines utilisées) + électricité + usure de l'imprimante
+function taskCostLine(t) {
+  if (!(t.weight > 0)) return '';
+  const c = taskCost(t), lost = t.status === 3 || t.status === 4;
+  return `<div class="tCost${lost ? ' lost' : ''}">💶 ${t.status === 1 ? 'Coût prévu' : lost ? 'Coût perdu' : 'Coût'} <b>${eur(c.total)}</b><span>filament ${eur(c.material)} · électricité ${eur(c.power)} · usure machine ${eur(c.machine)}</span></div>`;
+}
 const taskCard = t => `<div class="task${selTasks.has(t.id) ? ' sel' : ''}">
     ${t.weight > 0 && t.status !== 1 ? `<label class="tChk" title="Sélectionner"><input type="checkbox" data-sel="${esc(t.id)}"${selTasks.has(t.id) ? ' checked' : ''}></label>` : ''}
     ${taskImg(t)}<div style="min-width:0">
     <div class="tTitle">${esc((t.title || 'Impression').replace(/_/g, ' ').replace(/\s+/g, ' ').trim())}</div>
     ${state.taskSold?.[t.id] || state.taskDone?.[t.id] === 'stock' ? `<div class="hint" style="margin:3px 0 0">${[state.taskDone?.[t.id] === 'stock' ? '✓ ajoutée au stock' : '', state.taskSold?.[t.id] ? '✓ vendue' : ''].filter(Boolean).join(' · ')}</div>` : ''}
     <div class="hint" style="margin:2px 0 0">${t.end || t.start ? fmtDate(String(t.end || t.start).slice(0, 10)) + ' · ' : ''}${esc(t.deviceName || devNameOf(t.device))}${t.minutes ? ' · ' + dur(t.minutes / 60) : ''} · <b>${gr(t.weight)}</b> · ${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}</div>
+    ${taskCostLine(t)}
     <div class="trays" style="margin-top:6px">${(t.ams || []).map(m => `<span class="tray"><span class="dot" style="background:${esc(m.color || '#999')}"></span>${esc(m.letter || m.type)} · ${gr(m.weight)}</span>`).join('')}</div>
     ${t.weight > 0 ? `<div class="tActs"><button class="btn small" data-tsell="${esc(t.id)}">Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">Calculer</button>${t.status === 2 ? `<button class="btn small" data-tstock="${esc(t.id)}">Ajouter au stock</button>` : ''}${suggestModel(t)?.sure ? '' : `<button class="btn small" data-tcat="${esc(t.id)}">Ajouter au catalogue</button>`}</div>` : ''}
   </div></div>`;
