@@ -2438,17 +2438,22 @@ function renderQueue() {
     const where = isDone ? `✓ imprimée${q.doneAt ? ' le ' + fmtDate(new Date(q.doneAt).toLocaleDateString('sv')) : ''}${q.printer ? ' sur ' + esc(devName(q.printer)) : ''}`
       : p.running ? `<b>🖨️ en cours sur ${esc(devName(p.dev))}</b>${p.progress != null ? ` · ${p.progress} %` : ''} · fin vers ${whenTxt(p.end)}`
       : p.dev ? `${q.printer ? '' : 'auto → '}<b>${esc(devName(p.dev))}</b> · ${p.start - Date.now() < 60000 ? 'peut démarrer maintenant' : 'démarre vers ' + whenTxt(p.start)} · fin vers ${whenTxt(p.end)}` : '';
-    const open = m.file ? `<button class="btn small" data-qact="studio">🖥️ Ouvrir dans Bambu Studio</button>` : '';
+    const open = !IS_PHONE && m.file ? `<button class="btn small" data-qact="studio">🖥️ Ouvrir dans Bambu Studio</button>` : '';
     const handy = IS_PHONE && handyFromLink(m.link) ? `<a class="btn small" href="${esc(handyFromLink(m.link))}">📱 Imprimer avec Bambu Handy</a>` : '';
-    const dl = IS_PHONE && m.file && !handy ? `<a class="btn small" href="${fileHref(m.file)}">📄 Fichier</a>` : '';
+    // téléphone, modèle hors MakerWorld : Bambu Handy ne sait pas ouvrir un fichier ; on dit d'où le relancer
+    let how = '';
+    if (IS_PHONE && !handy && !isDone) {
+      const last = allTasks().find(t => t.status !== 1 && taskOk(t) && suggestModel(t)?.id === m.id);
+      how = `<div class="hint" style="margin:4px 0 0">${last ? `↻ Déjà imprimé le ${fmtDate(new Date(last.end || last.start).toLocaleDateString('sv'))} sur ${esc(devName(last.device))} (« ${esc(last.title.replace(/_/g, ' ').trim())} ») : relance-le depuis l’historique d’impression de Bambu Handy, ou depuis Bambu Studio sur l’ordinateur.` : '🖥️ À lancer depuis Bambu Studio sur l’ordinateur (Bambu Handy n’ouvre que les modèles MakerWorld).'}</div>`;
+    }
     return `<div class="qItem${p.running ? ' run' : ''}${isDone ? ' done' : ''}" data-q="${esc(q.id)}">
       ${isDone ? '' : `<div class="qMove"><button type="button" data-qact="up" aria-label="Monter"${i === 0 ? ' disabled' : ''}>▲</button><button type="button" data-qact="down" aria-label="Descendre"${i === wait.length - 1 ? ' disabled' : ''}>▼</button></div>`}
       ${m.thumb ? `<img class="tImg" src="${esc(m.thumb)}" alt="">` : '<span class="tImg">🧊</span>'}
       <div style="min-width:0;flex:1"><div class="tTitle">${esc(m.name)} <span class="muted">· ${q.pieces} pièce${q.pieces > 1 ? 's' : ''} · ${dur(queueMinutes(m) / 60)}</span></div>
         ${o ? `<div class="hint" style="margin:1px 0 0">📋 Commande ${esc(o.client)}${o.due ? ' · pour le ' + fmtDate(o.due) : ''}</div>` : ''}
-        <div class="hint" style="margin:2px 0 0">${where}</div>
+        <div class="hint" style="margin:2px 0 0">${where}</div>${how}
         ${isDone ? '' : `<div class="oActs">${devs.length > 1 ? `<select data-qact="printer" style="width:auto;margin:0;padding:6px 10px;font-size:14px"><option value="">Imprimante : auto</option>${devs.map(d => `<option value="${esc(d.id)}"${q.printer === d.id ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select>` : ''}
-          ${handy}${open}${dl}<button class="btn small" data-qact="done">✓ Imprimée</button><button class="btn small" data-qact="del" aria-label="Retirer">✕</button></div>`}
+          ${handy}${open}<button class="btn small" data-qact="done">✓ Imprimée</button><button class="btn small" data-qact="del" aria-label="Retirer">✕</button></div>`}
       </div></div>`;
   };
   $('queueList').innerHTML = (wait.map(item).join('') || emptyState('🖨️', 'Rien à imprimer', 'Ajoute un modèle du catalogue, ou « Mettre en file » depuis une commande : l’app planifie sur tes imprimantes et coche tout seul ce qui est imprimé.'))
