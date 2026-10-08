@@ -2411,8 +2411,34 @@ const periodLabel = (k, p) => p === 'm' ? monthLabel(k) : p === 't' ? `${k.slice
 // Coût de production d'une impression : filament + électricité + machine (amortissement + maintenance), sans main-d'œuvre
 // Impression arrêtée (statut 3 = échouée OU arrêtée à la main) : Bambu garde le poids et la durée prévus pour tout le fichier.
 // La part réellement imprimée = durée réelle / durée prévue (null si l'impression n'a pas été arrêtée).
+// Bambu marque parfois « échouée » une impression bel et bien faite (arrêt noté dans la seconde, souvent après une coupure du cloud) :
+// arrêtée en moins de 2 min, imprimante pas relancée pendant toute la durée prévue, et fichier pas réimprimé juste après → imprimée en entier.
+// Le choix fait à la main dans l'historique (state.taskFix : 'done' / 'stop') passe avant.
+let ghostCache = null;
+function ghostIds() {
+  const src = [hist?.tasks, bambu?.tasks];
+  if (ghostCache && ghostCache.src[0] === src[0] && ghostCache.src[1] === src[1]) return ghostCache.ids;
+  const ids = new Set(), byDev = new Map();
+  for (const t of allTasks()) if (t.start) (byDev.get(t.device) || byDev.set(t.device, []).get(t.device)).push(t);
+  for (const list of byDev.values()) {
+    list.sort((a, b) => String(a.start).localeCompare(String(b.start)));
+    list.forEach((t, i) => {
+      if ((t.status !== 3 && t.status !== 4) || !t.end || !(t.minutes >= 5)) return;
+      const st = Date.parse(t.start), real = (Date.parse(t.end) - st) / 60000;
+      if (!(real < 2)) return;
+      const next = list[i + 1] ? Date.parse(list[i + 1].start) : Date.now();
+      // même fichier relancé et terminé dans les 48 h : c'était bien un essai arrêté
+      const retried = list.slice(i + 1).some(x => x.status === 2 && Date.parse(x.start) - st < 48 * 36e5 && normTitle(x.title) === normTitle(t.title) && Math.abs(x.weight - t.weight) <= t.weight * .01);
+      if (next - st >= t.minutes * 60000 * .9 && !retried) ids.add(t.id);
+    });
+  }
+  ghostCache = {src, ids};
+  return ids;
+}
+const taskFixOf = t => state.taskFix?.[t.id] || (ghostIds().has(t.id) ? 'guess' : '');
 function taskPart(t) {
   if (t.status !== 3 && t.status !== 4) return null;
+  const fix = taskFixOf(t); if (fix === 'done' || fix === 'guess') return 1;
   const real = t.start && t.end ? (new Date(t.end) - new Date(t.start)) / 60000 : null;
   if (real == null || !(t.minutes > 0)) return null;
   return Math.max(0, Math.min(1, real / t.minutes));
@@ -2649,7 +2675,7 @@ function mergeStates(server, local) {
   const trash = {...(server.trash || {}), ...(local.trash || {})}, limit = Date.now() - 120 * 864e5;
   for (const k in trash) if (trash[k] < limit) delete trash[k];
   const out = {...normalizeState(server), ...local, trash};
-  for (const k of ['taskDone', 'taskLinks', 'taskSold']) out[k] = {...(server[k] || {}), ...(local[k] || {})};
+  for (const k of ['taskDone', 'taskLinks', 'taskSold', 'taskFix']) out[k] = {...(server[k] || {}), ...(local[k] || {})};
   for (const k of ['spools', 'models', 'prints', 'sales']) {
     const localIds = new Set((local[k] || []).map(x => x.id));
     out[k] = [...(server[k] || []).filter(x => !localIds.has(x.id)), ...(local[k] || [])].filter(x => !trash[x.id]);
@@ -2830,7 +2856,9 @@ $('spoolSeg').addEventListener('click', e => {
 const devNameOf = id => (bambu?.devices || hist?.devices || []).find(d => d.id === id)?.name || '';
 // Durée, poids et état : pour une impression arrêtée, ce qui a vraiment été imprimé
 function taskLine(t) {
-  const p = taskPart(t);
+  const p = taskPart(t), fix = taskFixOf(t);
+  if (fix === 'done' || fix === 'guess') return ` · ${dur(t.minutes / 60)} · <b>${gr(t.weight)}</b> · imprimée${fix === 'guess' ? ' (Bambu la dit arrêtée tout de suite, mais l’imprimante n’a pas été relancée ensuite)' : ''} <button class="link" data-tfix="${esc(t.id)}|stop">Non, vraiment arrêtée</button>`;
+  if (p != null && p < .97) return ` · ${dur(t.minutes * p / 60)} · <b>≈ ${gr(t.weight * p)}</b> sur ${gr(t.weight)} · arrêtée à ${Math.round(p * 100)} % <button class="link" data-tfix="${esc(t.id)}|done">Imprimée en entier ?</button>`;
   if (p == null) return `${t.minutes ? ' · ' + dur(t.minutes / 60) : ''} · <b>${gr(t.weight)}</b> · ${esc(TASK_STATUS[t.status] || 'statut ' + t.status)}`;
   return ` · ${dur(t.minutes * p / 60)} · <b>≈ ${gr(t.weight * p)}</b> sur ${gr(t.weight)} · ${p >= .97 ? 'arrêtée à la toute fin' : `arrêtée à ${Math.round(p * 100)} %`}`;
 }
@@ -2892,6 +2920,13 @@ $('histCard').addEventListener('click', async e => {
     openTaskStock(t); return;
   }
   const st = e.target.closest('[data-stock],[data-skip]');
+  const fx = e.target.closest('[data-tfix]');
+  if (fx) {
+    const [id, v] = fx.dataset.tfix.split('|');
+    (state.taskFix ||= {})[id] = v; save(); trackChipless(); renderAll();
+    toast(v === 'done' ? '✓ Comptée comme imprimée en entier (bobines, coûts, production)' : '✓ Comptée comme arrêtée');
+    return;
+  }
   if (st) {
     const row = st.closest('.tsRow'), t = allTasks().find(x => x.id === (st.dataset.stock || st.dataset.skip)); if (!t) return;
     if (st.dataset.skip) { (state.taskDone ||= {})[t.id] = 'skip'; save(); renderHist(); return; }
@@ -2942,7 +2977,7 @@ function autoStockFromTasks() {
   if (!cloud.logged) return false;
   if (!state.autoStockFrom) { state.autoStockFrom = new Date(Date.now() - 7 * 864e5).toISOString(); save(); }
   const done = [];
-  for (const t of toSortList()) { const s = suggestModel(t); if (s?.sure) { addTaskToStock(t, s.id); done.push(s.id); } }
+  for (const t of toSortList()) { if (taskFixOf(t) === 'guess') continue; const s = suggestModel(t); if (s?.sure) { addTaskToStock(t, s.id); done.push(s.id); } }
   if (!done.length) return false;
   save();
   const names = [...new Set(done.map(id => state.models.find(m => m.id === id)?.name))];
