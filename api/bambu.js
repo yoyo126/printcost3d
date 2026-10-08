@@ -14,7 +14,7 @@ const HEADERS = {
   'Accept': 'application/json', 'Content-Type': 'application/json',
 };
 
-async function call(url, {method = 'GET', body, token} = {}) {
+export async function call(url, {method = 'GET', body, token} = {}) {
   const r = await fetch(url.startsWith('http') ? url : API + url, {
     method, headers: {...HEADERS, ...(token ? {Authorization: `Bearer ${token}`} : {})},
     body: body ? JSON.stringify(body) : undefined,
@@ -165,7 +165,7 @@ function slotOf(m) {
   if (g >= 254) return {index: 'ext', letter: 'Ext'};
   return {index: g, letter: g < 64 ? String.fromCharCode(65 + Math.floor(g / 4)) + (g % 4 + 1) : ''};
 }
-function normTask(t) {
+export function normTask(t) {
   return {
     id: String(t.id), title: t.title || t.designTitle || '', device: t.deviceId, deviceName: t.deviceName || '',
     status: t.status, start: t.startTime || null, end: t.endTime || null, weight: Number(t.weight) || 0, minutes: Math.round((Number(t.costTime) || 0) / 60),
@@ -176,7 +176,7 @@ function normTask(t) {
   };
 }
 // L'historique est gardé dans la base : il s'accumule au fil des lectures
-async function storeTasks(tasks) {
+export async function storeTasks(tasks) {
   if (!tasks.length) return;
   await sql`insert into pc_tasks (id, data, ended_at)
             select x->>'id', x, nullif(x->>'end', '')::timestamptz from jsonb_array_elements(${JSON.stringify(tasks)}::jsonb) as x

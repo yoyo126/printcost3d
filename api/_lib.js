@@ -12,6 +12,8 @@ export function schema() {
     await sql`create table if not exists pc_bambu (id int primary key, account text, token_enc text, username text, expires_at timestamptz, snapshot jsonb, updated_at timestamptz not null default now())`;
     await sql`create table if not exists pc_login_fail (at timestamptz not null default now())`;
     await sql`create table if not exists pc_tasks (id text primary key, data jsonb not null, ended_at timestamptz)`;
+    await sql`create table if not exists pc_push (endpoint text primary key, sub jsonb not null, name text, created_at timestamptz not null default now())`;
+    await sql`create table if not exists pc_kv (k text primary key, v jsonb)`;
   })().catch(e => { ready = null; throw e; });
 }
 
