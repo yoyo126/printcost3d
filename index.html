@@ -352,6 +352,10 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .bar.low i{background:var(--bad)}
 .toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap}
 .toolbar select,.toolbar input{width:auto;margin:0}
+.rebuy{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.rebuy .dotBig{flex:none}
+.rebuy>div:nth-child(2){flex:1}
+.rebuyQty{display:flex;flex-direction:column;align-items:flex-end;text-align:right;font-size:14px;white-space:nowrap}
 .histDates{display:flex;gap:8px 10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .histDates select{width:auto;margin:0;flex:0 1 auto}
 @media (max-width:600px){.histDates select{flex:1 1 140px;min-width:0}}
@@ -688,6 +692,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
       <div class="card" id="histCard"></div>
     </div>
     <div id="secStock">
+      <div class="card" id="rebuyCard" hidden></div>
       <div class="toolbar"><span id="spoolSummary" style="margin:0;font-size:15px;font-weight:600;color:var(--muted)"></span><button class="btn primary" id="newSpool">＋ Ajouter une bobine</button></div>
       <div class="search" style="max-width:none;margin-bottom:12px"><input id="spoolSearch" type="search" placeholder="Rechercher une couleur, une référence, un emplacement…"></div>
       <div id="spoolList" class="spoolGrid"></div>
@@ -745,6 +750,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <label>Risque d'échec (%)<input name="risk" type="number" min="0" step="any"><small>Ajouté au coût matière + machine pour couvrir les ratés.</small></label>
     <label>Filament sans bobine (€/kg)<input name="defaultFilamentPrice" type="number" min="0" step="any"><small>Prix utilisé quand aucune bobine du stock n'est choisie.</small></label>
     <label>Alerte bobine faible (g)<input name="lowStock" type="number" min="0" step="any"></label>
+    <label>Prévenir avant d'être à court (jours)<input name="rebuyDays" type="number" min="1" step="1"><small>Une couleur part dans « À racheter » quand il en reste moins que pour ce nombre de jours, au rythme des 30 derniers jours.</small></label>
     <label>Marge de sécurité filament (g)<input name="safetyGrams" type="number" min="0" step="any"><small>L'outil prévient s'il ne resterait pas au moins cette quantité après l'impression.</small></label>
   </div>
   <h3>Ton temps</h3>
@@ -770,6 +776,15 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   <p class="hint">Commission en % du prix + frais fixes par commande. Valeurs relevées en octobre 2026, à vérifier si une plateforme change ses conditions.</p>
   <div class="listEdit" id="channelEdit"></div>
   <button class="link" type="button" id="addChannel">＋ Ajouter un canal</button>
+  <div id="notifBox" hidden>
+    <h3>🔔 Notifications</h3>
+    <p class="hint" id="notifInfo"></p>
+    <div class="grid2" id="notifPrefs">
+      <label class="check"><input type="checkbox" id="notifDone"> Impression terminée</label>
+      <label class="check"><input type="checkbox" id="notifStop"> Impression arrêtée en cours de route</label>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn" type="button" id="notifBtn">🔔 Activer sur cet appareil</button><button class="btn" type="button" id="notifTest" hidden>Envoyer un test</button></div>
+  </div>
   <div id="accountBox" hidden>
     <h3>Compte en ligne</h3>
     <p class="hint">Tes données sont enregistrées dans ton compte et synchronisées entre tes appareils.</p>
@@ -1021,7 +1036,7 @@ function confetti() {
 function defaultState() {
   return {
     version: 2,
-    settings: {electricity:.25, maintenance:.10, lifeHours:5000, risk:7, defaultFilamentPrice:12, lowStock:150, safetyGrams:15,
+    settings: {electricity:.25, maintenance:.10, lifeHours:5000, risk:7, defaultFilamentPrice:12, lowStock:150, safetyGrams:15, rebuyDays:14,
       laborRate:15, prepMin:5, finishMin:2, packaging:.30, margin:100, minimumPrice:2, rounding:'0.90', monthlyGoal:0, estFlow:35, printerMode:'fixed', defaultPrinter:'h2d'},
     printers: [
       {id:'p2s', name:'Bambu Lab P2S + 2 AMS', price:1000, power:120},
@@ -2167,6 +2182,8 @@ function inkOn(hex) {
 }
 const kgTxt = g => `${(g / 1000).toLocaleString('fr-FR', {maximumFractionDigits: 2})} kg`;
 const spoolKey = s => (s.brand || '').toLowerCase().replace(/\s+/g, '') + '|' + (s.ref ? 'ref:' + s.ref : `${baseMat(s.material)}|${(s.colorName || s.color || '').toLowerCase()}`);
+// Même produit pour la prévision de rachat : marque + référence, sinon marque + matière + couleur réelle (le nom de couleur peut manquer)
+const kindKey = s => (s.brand || '').toLowerCase().replace(/\s+/g, '') + '|' + (s.ref ? 'ref:' + s.ref : `${baseMat(s.material)}|${(s.color || '').toLowerCase()}`);
 let openGroups = new Set();
 function spoolRow(s, low) {
   const ratio = Math.max(0, Math.min(1, s.remaining / s.weight)), isLow = s.remaining < low;
@@ -2176,7 +2193,68 @@ function spoolRow(s, low) {
     <div class="bar ${isLow ? 'low' : ''}"><i style="width:${ratio * 100}%"></i></div>
     <div class="meta">${how ? how + ' · ' : ''}${eur(s.price)} les ${gr(s.weight)}${s.date ? ' · acheté le ' + fmtDate(s.date) : ''} · <span class="link" style="padding:0">modifier</span></div></div>`;
 }
+// Consommation récente par référence du stock (même regroupement que la liste) : grammes des impressions des 30 derniers jours.
+// Chaque filament d'une impression va à la bobine de son emplacement si la couleur correspond encore, sinon à la bobine
+// du stock la plus proche (même matière, couleur proche).
+function usageByGroup(days = 30) {
+  const tasks = allTasks(), since = Date.now() - days * 864e5, out = new Map();
+  const first = Math.min(...tasks.map(t => Date.parse(t.start || t.end || '') || Infinity));
+  for (const t of tasks) {
+    const end = Date.parse(t.end || t.start || ''); if (!end || end < since || t.status === 1) continue;
+    const k = taskPart(t) ?? 1; if (!k) continue;
+    for (const m of t.ams || []) {
+      const g = num(m.weight) * k; if (!g) continue;
+      let sp = spoolAt(t.device, m.index);
+      if (sp && m.color && colorDist(sp.color, m.color) > 90) sp = null;
+      if (!sp) sp = state.spools.filter(x => matOk(x.material, m.type)).sort((a, b) => colorDist(a.color, m.color) - colorDist(b.color, m.color))[0];
+      if (!sp || (m.color && colorDist(sp.color, m.color) > 90)) continue;
+      out.set(kindKey(sp), (out.get(kindKey(sp)) || 0) + g);
+    }
+  }
+  // historique plus court que la période : on divise par le nombre de jours réellement couverts (7 au minimum)
+  const span = Math.max(7, Math.min(days, (Date.now() - first) / 864e5 || days));
+  return {perDay: new Map([...out].map(([k, g]) => [k, g / span])), span};
+}
+// Références à racheter : à court dans moins de « rebuyDays » jours au rythme actuel, ou déjà sous le seuil bas alors qu'on s'en sert
+function rebuyList() {
+  if (!allTasks().length) return [];
+  const {perDay} = usageByGroup(), groups = new Map(), low = state.settings.lowStock, horizon = state.settings.rebuyDays || 14;
+  for (const sp of state.spools) { const k = kindKey(sp); groups.has(k) ? groups.get(k).push(sp) : groups.set(k, [sp]); }
+  const out = [];
+  for (const [k, sps] of groups) {
+    const rate = perDay.get(k) || 0; if (!rate) continue;
+    const total = sps.reduce((a, x) => a + Math.max(0, x.remaining), 0), days = total / rate;
+    if (days > horizon && total >= low) continue;
+    // modèle pour le rachat : la bobine la plus récente qui a un nom de couleur et un prix
+    const s = [...sps].sort((a, b) => !!b.colorName - !!a.colorName || !!b.price - !!a.price || String(b.date || '').localeCompare(String(a.date || '')))[0];
+    const qty = Math.max(1, Math.ceil((rate * (horizon + 30) - total) / (s.weight || 1000)));
+    out.push({k, s, total, rate, days, qty, price: (s.price || 0) * qty});
+  }
+  return out.sort((a, b) => a.days - b.days);
+}
+const daysTxt = d => d < 1 ? 'moins d’un jour' : d < 60 ? `≈ ${Math.round(d)} jour${Math.round(d) > 1 ? 's' : ''}` : `≈ ${Math.round(d / 30)} mois`;
+const rebuyName = s => `${s.colorName || s.material}${s.colorName ? ' · ' + s.material : ''}${s.brand ? ' · ' + s.brand : ''}${s.ref ? ' (réf. ' + s.ref + ')' : ''}`;
+function renderRebuy() {
+  const list = rebuyList(), box = $('rebuyCard');
+  box.hidden = !list.length; if (!list.length) return;
+  const sum = list.reduce((a, x) => a + x.price, 0);
+  box.innerHTML = `<div class="cardHead"><span class="badgeIcon">🛒</span><h2>À racheter bientôt</h2><button class="link" id="rebuyCopy" style="margin-left:auto">📋<span class="hideSm"> Copier la liste</span></button></div>
+    <p class="hint" style="margin-top:0">Au rythme de tes impressions des 30 derniers jours. Prévoir ≈ <b>${eur(sum)}</b> pour tenir ${state.settings.rebuyDays || 14} jours + 1 mois.</p>
+    ${list.map(x => `<div class="rebuy"><span class="dotBig" style="background:${esc(x.s.color)}"></span><div style="min-width:0">
+      <b>${esc(x.s.colorName || x.s.material)}</b> <span class="muted">${esc(x.s.material)}${x.s.brand ? ' · ' + esc(x.s.brand) : ''}</span>
+      <div class="hint" style="margin:2px 0 0">${x.total <= 0 ? '<b class="neg">épuisée</b>' : `reste ${gr(x.total)} · <b class="${x.days < 7 ? 'neg' : ''}">${daysTxt(x.days)}</b>`} · tu en utilises ≈ ${gr(x.rate * 7)} par semaine</div></div>
+      <div class="rebuyQty"><b>${x.qty} bobine${x.qty > 1 ? 's' : ''}</b><span class="muted">${x.price ? '≈ ' + eur(x.price) : ''}</span></div></div>`).join('')}`;
+}
+$('rebuyCard').addEventListener('click', async e => {
+  if (!e.target.closest('#rebuyCopy')) return;
+  const list = rebuyList();
+  const txt = `Filament à racheter (${new Date().toLocaleDateString('fr-FR')}) :\n` + list.map(x => `- ${x.qty} × ${rebuyName(x.s)}${x.price ? ' ≈ ' + eur(x.price) : ''}`).join('\n')
+    + `\nTotal ≈ ${eur(list.reduce((a, x) => a + x.price, 0))}`;
+  try { await navigator.clipboard.writeText(txt); toast('📋 Liste de courses copiée'); }
+  catch { if (navigator.share) navigator.share({text: txt}).catch(() => {}); else prompt('Liste de courses :', txt); }
+});
 function renderSpools() {
+  renderRebuy();
   const low = state.settings.lowStock, all = $('showEmpty').checked, q = ($('spoolSearch')?.value || '').trim().toLowerCase();
   const list = state.spools.filter(s => all || s.remaining > 0)
     .filter(s => !q || [s.material, s.colorName, s.brand, s.ref, s.amsWhere].join(' ').toLowerCase().includes(q));
@@ -2187,8 +2265,10 @@ function renderSpools() {
   const totalG = active.reduce((a, s) => a + s.remaining, 0), totalV = active.reduce((a, s) => a + s.remaining * spoolPerKg(s) / 1000, 0);
   const refs = new Set(active.map(spoolKey)).size;
   $('spoolSummary').textContent = `${active.length} bobine${active.length > 1 ? 's' : ''} · ${refs} référence${refs > 1 ? 's' : ''} · ${totalG >= 1000 ? kgTxt(totalG) : gr(totalG)} · valeur ${eur(totalV)}`;
+  const {perDay} = allTasks().length ? usageByGroup() : {perDay: new Map()};
+  const kindLeft = new Map(); for (const x of state.spools) kindLeft.set(kindKey(x), (kindLeft.get(kindKey(x)) || 0) + Math.max(0, x.remaining));
   $('spoolList').innerHTML = sorted.map(([k, sps]) => {
-    const s = sps[0], total = sps.reduce((a, x) => a + Math.max(0, x.remaining), 0), cap = sps.reduce((a, x) => a + x.weight, 0);
+    const s = sps[0], rate = perDay.get(kindKey(s)) || 0, left = kindLeft.get(kindKey(s)) || 0, total = sps.reduce((a, x) => a + Math.max(0, x.remaining), 0), cap = sps.reduce((a, x) => a + x.weight, 0);
     const inMachine = sps.filter(x => x.amsWhere), reserve = sps.length - inMachine.length, isLow = total < low, open = openGroups.has(k);
     const ink = inkOn(s.color);
     return `<div class="grp${open ? ' open' : ''}" data-grp="${esc(k)}">
@@ -2196,7 +2276,7 @@ function renderSpools() {
       <div class="gInfo"><h4>${esc(s.colorName || s.material)}</h4>
         <div class="meta">${esc(s.brand || 'Marque ?')} · ${eur(spoolPerKg(s))}/kg</div>
         <div class="kg ${isLow ? 'neg' : ''}">${total >= 1000 ? kgTxt(total) : gr(total)} <span class="meta" style="font-family:inherit;font-weight:500">${sps.length > 1 ? `· ${sps.length} bobines` : ''}</span></div>
-        <div class="meta">${inMachine.map(x => { const [pr, sl] = x.amsWhere.split(' · '); return `📍${esc(pr.split(' ').pop())} ${esc(sl || '')}`; }).join(' ')}${reserve ? ` 📦${reserve > 1 ? ' ' + reserve + ' en réserve' : ' en réserve'}` : ''}${total <= 0 ? ' · vide' : isLow ? ' · <b class="neg">bientôt vide</b>' : ''}</div>
+        <div class="meta">${inMachine.map(x => { const [pr, sl] = x.amsWhere.split(' · '); return `📍${esc(pr.split(' ').pop())} ${esc(sl || '')}`; }).join(' ')}${reserve ? ` 📦${reserve > 1 ? ' ' + reserve + ' en réserve' : ' en réserve'}` : ''}${total <= 0 ? ' · vide' : isLow ? ' · <b class="neg">bientôt vide</b>' : ''}${rate && left > 0 ? ` · ${daysTxt(left / rate)}` : ''}</div>
         <div class="gBar ${isLow ? 'low' : ''}"><i style="width:${cap ? Math.min(100, total / cap * 100) : 0}%"></i></div>
       </div>
       ${open && sps.length > 1 ? `<div class="subList">${sps.map(x => spoolRow(x, low)).join('')}</div>` : ''}
@@ -2419,7 +2499,9 @@ async function loadHistory(full = false) {
   } catch { histProgress = ''; $('prodInfo').textContent = 'Serveur injoignable.'; }
   renderProd();
   if (!$('secHist').hidden) renderHist();
-  if (trackChipless()) { if (!$('secStock').hidden) renderSpools(); if (!$('secAms').hidden) renderBambu(); }
+  // stock toujours redessiné : la prévision de rachat dépend de l'historique
+  if (trackChipless() && !$('secAms').hidden) renderBambu();
+  if (!$('secStock').hidden) renderSpools();
   if (autoStockFromTasks() && !$('secHist').hidden) renderHist();
 }
 const periodKey = (d, p) => { const y = d.slice(0, 4), m = +d.slice(5, 7); return p === 'm' ? d.slice(0, 7) : p === 't' ? `${y}-T${Math.ceil(m / 3)}` : p === 's' ? `${y}-S${m <= 6 ? 1 : 2}` : y; };
@@ -2591,6 +2673,54 @@ function renderChart(rows, now) {
   box.addEventListener('pointerleave', () => show(null));
 }
 
+/* ---------- Notifications (Web Push) ---------- */
+// Le service worker ne sert qu'à recevoir les notifications ; le serveur vérifie les impressions toutes les ~5 min.
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+async function pushSub() { try { return await (await navigator.serviceWorker.getRegistration())?.pushManager.getSubscription() || null; } catch { return null; } }
+async function renderNotif() {
+  $('notifBox').hidden = !cloud.logged; if (!cloud.logged) return;
+  const n = {done: true, stop: true, ...(state.settings.notify || {})};
+  $('notifDone').checked = n.done; $('notifStop').checked = n.stop;
+  const info = $('notifInfo'), btn = $('notifBtn'), iOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  $('notifTest').hidden = true; btn.hidden = false;
+  if (!pushOk()) {
+    btn.hidden = true;
+    info.innerHTML = iOS && !isStandalone() ? 'Sur iPhone, les notifications marchent quand l’app est installée : bouton <b>Partager</b> › <b>Sur l’écran d’accueil</b>, ouvre PrintCost depuis l’icône, puis reviens ici.' : 'Ce navigateur ne gère pas les notifications.';
+    return;
+  }
+  if (Notification.permission === 'denied') { btn.hidden = true; info.textContent = 'Notifications bloquées pour PrintCost : autorise-les dans les réglages du téléphone (Notifications › PrintCost) ou du navigateur, puis reviens ici.'; return; }
+  const sub = await pushSub();
+  info.textContent = sub ? '✓ Activées sur cet appareil : tu es prévenu à la fin de chaque impression, avec ce qu’il reste sur les bobines utilisées (vérification toutes les 5 à 15 min).'
+    : 'Reçois une notification à la fin de chaque impression, avec ce qu’il reste sur les bobines utilisées.';
+  btn.textContent = sub ? 'Désactiver sur cet appareil' : '🔔 Activer sur cet appareil';
+  $('notifTest').hidden = !sub;
+}
+const b64uBytes = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+$('notifBtn').onclick = async () => {
+  const btn = $('notifBtn'); btn.disabled = true;
+  try {
+    const old = await pushSub();
+    if (old) { await api('/api/push', {method: 'POST', body: {action: 'unsubscribe', endpoint: old.endpoint}}); await old.unsubscribe(); toast('🔕 Notifications désactivées sur cet appareil'); return; }
+    // la demande d'autorisation doit partir tout de suite du toucher (iPhone)
+    if (await Notification.requestPermission() !== 'granted') { toast('Notifications refusées'); return; }
+    const reg = await navigator.serviceWorker.register('sw.js'); await navigator.serviceWorker.ready;
+    const k = await api('/api/push'); if (!k.ok || !k.data?.key) { toast('⚠️ Serveur injoignable'); return; }
+    const sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64uBytes(k.data.key)});
+    const name = IS_PHONE ? (/iPhone/.test(navigator.userAgent) ? 'iPhone' : /iPad/.test(navigator.userAgent) ? 'iPad' : 'Téléphone') : 'Ordinateur';
+    const r = await api('/api/push', {method: 'POST', body: {action: 'subscribe', sub: sub.toJSON(), name}});
+    toast(r.ok ? '🔔 Notifications activées' : '⚠️ ' + (r.data?.error || 'Activation impossible'));
+  } catch (e) { toast('⚠️ Activation impossible : ' + (e.message || e)); }
+  finally { btn.disabled = false; renderNotif(); }
+};
+$('notifTest').onclick = async () => {
+  const r = await api('/api/push', {method: 'POST', body: {action: 'test'}});
+  toast(r.data?.sent ? `🔔 Test envoyé (${r.data.sent} appareil${r.data.sent > 1 ? 's' : ''})` : '⚠️ Aucun appareil n’a reçu le test');
+};
+['notifDone', 'notifStop'].forEach(id => $(id).addEventListener('change', () => {
+  state.settings.notify = {done: $('notifDone').checked, stop: $('notifStop').checked}; save();
+}));
+
 /* ---------- Réglages ---------- */
 let draftPrinters, draftChannels;
 function renderPrinterChoice(value) {
@@ -2626,6 +2756,7 @@ $('settingsBtn').onclick = () => {
   Object.entries(state.settings).forEach(([k, v]) => { if (f[k]) f[k].value = v; });
   draftPrinters = JSON.parse(JSON.stringify(state.printers)); draftChannels = JSON.parse(JSON.stringify(state.channels));
   if (cloud.logged) loadBackups();
+  renderNotif();
   renderListEdits(); renderPrinterChoice(state.settings.printerMode === 'file' ? 'file' : `fixed:${defaultPrinterId()}`); $('dlgSettings').showModal();
 };
 $('fSettings').addEventListener('submit', e => {
@@ -2814,6 +2945,7 @@ async function loadBambu(force = false) {
   if (bambu?.connected && !lsGet('pc3d-hist-slots3')) { lsSet('pc3d-hist-slots3', '1'); loadHistory(true).then(() => { syncAmsToSpools(); trackChipless(); renderAll(); }).catch(() => {}); }
   syncAmsToSpools(); if (trackChipless() && !$('secStock').hidden) renderSpools();
   autoStockFromTasks(); renderBambu(); renderAlert();
+  fetch('/api/push?check=1').catch(() => {}); // rattrape les notifications dues pendant que l'app était fermée
 }
 function renderBambu() {
   const box = $('bambuCard'); box.hidden = !cloud.logged; if (box.hidden) return;
@@ -2904,7 +3036,32 @@ function taskText(t) {
     ...(t.ams || []).flatMap(m => [m.type, m.letter]),
     dt ? dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleDateString('fr-FR', {day: 'numeric', month: 'long', year: 'numeric', weekday: 'long'}) : ''].join(' '));
 }
-let histDev = 'all';
+let histDev = 'all', histList = [];
+// Export tableur (CSV pour Excel / Numbers) des impressions affichées par les filtres : poids et coûts réels
+function exportHistCsv() {
+  const list = histList; if (!list.length) { toast('Aucune impression à exporter'); return; }
+  const n2 = x => (Math.round((x || 0) * 100) / 100).toLocaleString('fr-FR', {useGrouping: false});
+  const cell = v => /[;"\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const rows = [['Date', 'Heure de fin', 'Imprimante', 'Impression', 'État', 'Durée prévue (min)', 'Durée réelle (min)', 'Part imprimée (%)',
+    'Filament (g)', 'Détail filaments', 'Coût filament (€)', 'Électricité (€)', 'Usure machine (€)', 'Coût total (€)']];
+  for (const t of list) {
+    const d = t.end || t.start ? new Date(t.end || t.start) : null, p = taskPart(t) ?? 1, fix = taskFixOf(t);
+    const real = t.start && t.end ? Math.round((Date.parse(t.end) - Date.parse(t.start)) / 60000) : '';
+    const st = t.status === 1 ? 'en cours' : fix === 'done' || fix === 'guess' ? 'terminée' : taskOk(t) ? 'terminée' : 'arrêtée';
+    const c = t.weight > 0 ? taskCost(t) : {material: 0, power: 0, machine: 0, total: 0};
+    rows.push([d ? d.toLocaleDateString('fr-FR') : '', d ? d.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}) : '',
+      t.deviceName || devNameOf(t.device), (t.title || '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim(), st, t.minutes || '', real, Math.round(p * 100),
+      n2(t.weight * p), (t.ams || []).map(m => `${m.letter || '?'} ${m.type} ${n2(m.weight * p)} g`).join(' + '),
+      n2(c.material), n2(c.power), n2(c.machine), n2(c.total)]);
+  }
+  const csv = '\ufeff' + rows.map(r => r.map(cell).join(';')).join('\r\n');
+  const file = new File([csv], `impressions-${today()}.csv`, {type: 'text/csv'});
+  // téléphone : feuille de partage (Fichiers, Mail…) ; ordinateur : téléchargement
+  if (IS_PHONE && navigator.canShare?.({files: [file]})) { navigator.share({files: [file]}).catch(() => {}); return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast(`⬇︎ ${list.length.toLocaleString('fr-FR')} impression${list.length > 1 ? 's' : ''} exportée${list.length > 1 ? 's' : ''}`);
+}
 function renderHist() {
   const box = $('histCard'), all = hist?.tasks || bambu?.tasks || [];
   // filtre par imprimante (compte Bambu + celles vues dans l'historique)
@@ -2928,8 +3085,9 @@ function renderHist() {
   const words = fold($('histSearch').value).split(/\s+/).filter(Boolean), filtered = words.length || histDev !== 'all' || from || to || mat || stv;
   const dayOf = t => { const d = t.end || t.start; return d ? new Date(d).toLocaleDateString('sv') : ''; };
   const list = all.filter(t => (histDev === 'all' || t.device === histDev) && (!mat || (t.ams || []).some(m => m.type === mat)) && (!stv || stateOf(t) === stv) && (!from || dayOf(t) >= from) && (!to || (dayOf(t) && dayOf(t) <= to)) && (!words.length || (x => words.every(w => x.includes(w)))(taskText(t))));
-  const head = `<div class="cardHead"><span class="badgeIcon">🕘</span><h2>Dernières impressions</h2><button class="link" id="hRefresh" style="margin-left:auto" aria-label="Actualiser">↻<span class="hideSm"> Actualiser</span></button></div>`;
+  const head = `<div class="cardHead"><span class="badgeIcon">🕘</span><h2>Dernières impressions</h2><button class="link" id="hCsv" style="margin-left:auto" aria-label="Exporter en tableur">⬇︎<span class="hideSm"> Exporter</span></button><button class="link" id="hRefresh" aria-label="Actualiser">↻<span class="hideSm"> Actualiser</span></button></div>`;
   if (!hist && !bambu) { box.innerHTML = head + '<p class="hint" style="margin:0">⏳ Chargement…</p>'; return; }
+  histList = list;
   const found = filtered ? `<p class="hint" style="margin:0 0 8px">${list.length.toLocaleString('fr-FR')} impression${list.length > 1 ? 's' : ''} trouvée${list.length > 1 ? 's' : ''} · ${gr(list.reduce((a, t) => a + (taskPart(t) ?? 1) * (mat ? (t.ams || []).filter(m => m.type === mat).reduce((g, m) => g + num(m.weight), 0) : t.weight || 0), 0))}${mat ? ` de ${esc(mat)}` : ''}</p>` : '';
   box.innerHTML = head + found + (list.length
     ? list.slice(0, histShown).map(taskCard).join('') + (list.length > histShown ? `<button class="btn block" id="hMore" style="margin-top:12px;width:100%">Voir plus (${list.length - histShown} de plus)</button>` : '')
@@ -2965,6 +3123,7 @@ $('histCard').addEventListener('change', e => {
 });
 $('histCard').addEventListener('click', async e => {
   if (e.target.closest('#hMore')) { histShown += 20; renderHist(); return; }
+  if (e.target.closest('#hCsv')) { exportHistCsv(); return; }
   if (e.target.closest('#hFull')) { e.target.closest('#hFull').disabled = true; await loadHistory(true); renderHist(); return; }
   if (e.target.closest('[data-tsall]')) { toSortAll = !toSortAll; renderHist(); return; }
   const ts2 = e.target.closest('[data-tstock],[data-tcat]');
@@ -3694,6 +3853,7 @@ job = newJob();
 renderCalc();
 try { const t = sessionStorage.getItem('pc3d-tab'); if (t && $(t)) showTab(t); } catch {}
 cloudInit();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>
