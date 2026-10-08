@@ -670,7 +670,10 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   <section id="spools" class="panel">
     <div class="seg segWide" id="spoolSeg" hidden><button data-s="ams">🛰️ Imprimantes</button><button data-s="hist">🕘 Impressions</button><button data-s="stock">🧵 Stock</button></div>
     <div id="secAms"><div class="card" id="bambuCard" hidden></div></div>
-    <div id="secHist" hidden><div class="card" id="histCard"></div></div>
+    <div id="secHist" hidden>
+      <div class="search" style="max-width:none;margin-bottom:12px"><input id="histSearch" type="search" placeholder="Rechercher : nom, imprimante, matière, emplacement, date, « échouée »…" enterkeyhint="search"></div>
+      <div class="card" id="histCard"></div>
+    </div>
     <div id="secStock">
       <div class="toolbar"><span id="spoolSummary" style="margin:0;font-size:15px;font-weight:600;color:var(--muted)"></span><button class="btn primary" id="newSpool">＋ Ajouter une bobine</button></div>
       <div class="search" style="max-width:none;margin-bottom:12px"><input id="spoolSearch" type="search" placeholder="Rechercher une couleur, une référence, un emplacement…"></div>
@@ -2880,14 +2883,25 @@ const taskCard = t => `<div class="task${selTasks.has(t.id) ? ' sel' : ''}">
     <div class="trays" style="margin-top:6px">${(t.ams || []).map(m => `<span class="tray"><span class="dot" style="background:${esc(m.color || '#999')}"></span>${esc(m.letter || m.type)} · ${gr(m.weight)}</span>`).join('')}</div>
     ${t.weight > 0 ? `<div class="tActs"><button class="btn small" data-tsell="${esc(t.id)}">Vendre</button><button class="btn small" data-tcalc="${esc(t.id)}">Calculer</button>${taskOk(t) ? `<button class="btn small" data-tstock="${esc(t.id)}">Ajouter au stock</button>` : ''}${suggestModel(t)?.sure ? '' : `<button class="btn small" data-tcat="${esc(t.id)}">Ajouter au catalogue</button>`}</div>` : ''}
   </div></div>`;
+// Recherche dans l'historique : tous les mots doivent se retrouver (nom, imprimante, matière, emplacement, date, état), sans accents
+const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_\-—–]+/g, ' ');
+function taskText(t) {
+  const d = t.end || t.start, dt = d ? new Date(d) : null, p = taskPart(t);
+  return fold([t.title, t.deviceName || devNameOf(t.device), ['done', 'guess'].includes(taskFixOf(t)) ? 'imprimee terminee' : TASK_STATUS[t.status], p != null && p < .97 ? 'arretee' : '',
+    ...(t.ams || []).flatMap(m => [m.type, m.letter]),
+    dt ? dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleDateString('fr-FR', {day: 'numeric', month: 'long', year: 'numeric', weekday: 'long'}) : ''].join(' '));
+}
 function renderHist() {
-  const box = $('histCard'), list = hist?.tasks || bambu?.tasks || [];
+  const box = $('histCard'), all = hist?.tasks || bambu?.tasks || [];
+  const words = fold($('histSearch').value).split(/\s+/).filter(Boolean);
+  const list = words.length ? all.filter(t => { const x = taskText(t); return words.every(w => x.includes(w)); }) : all;
   const head = `<div class="cardHead"><span class="badgeIcon">🕘</span><h2>Dernières impressions</h2><button class="link" id="hRefresh" style="margin-left:auto" aria-label="Actualiser">↻<span class="hideSm"> Actualiser</span></button></div>`;
   if (!hist && !bambu) { box.innerHTML = head + '<p class="hint" style="margin:0">⏳ Chargement…</p>'; return; }
-  box.innerHTML = head + (list.length
+  const found = words.length ? `<p class="hint" style="margin:0 0 8px">${list.length.toLocaleString('fr-FR')} impression${list.length > 1 ? 's' : ''} trouvée${list.length > 1 ? 's' : ''} · ${gr(list.reduce((a, t) => a + (taskPart(t) ?? 1) * (t.weight || 0), 0))}</p>` : '';
+  box.innerHTML = head + found + (list.length
     ? list.slice(0, histShown).map(taskCard).join('') + (list.length > histShown ? `<button class="btn block" id="hMore" style="margin-top:12px;width:100%">Voir plus (${list.length - histShown} de plus)</button>` : '')
-    : '<div class="empty"><span class="big">🕘</span>Aucune impression enregistrée pour l’instant.</div>')
-    + histSummary(list);
+    : `<div class="empty"><span class="big">🕘</span>${words.length ? 'Aucune impression ne correspond à ta recherche.' : 'Aucune impression enregistrée pour l’instant.'}</div>`)
+    + histSummary(all);
 }
 // Combien d'impressions sont gardées, depuis quand, par imprimante ; et le bouton pour tout récupérer
 function histSummary(list) {
@@ -2897,6 +2911,7 @@ function histSummary(list) {
   return `<div class="toolbar" style="margin-top:12px"><span class="hint" style="margin:0">${list.length.toLocaleString('fr-FR')} impression${list.length > 1 ? 's' : ''} gardée${list.length > 1 ? 's' : ''}${first ? ` depuis le ${new Date(first).toLocaleDateString('fr-FR')}` : ''}${Object.keys(by).length ? ' · ' + Object.entries(by).map(([n, c]) => `${esc(n)} : ${c.toLocaleString('fr-FR')}`).join(' · ') : ''}</span>
     <button class="btn small" id="hFull">↻ Récupérer tout l’historique</button></div>`;
 }
+$('histSearch').addEventListener('input', () => { histShown = 20; renderHist(); });
 $('histCard').addEventListener('change', e => {
   const c = e.target.closest('[data-sel]'); if (!c) return;
   c.checked ? selTasks.add(c.dataset.sel) : selTasks.delete(c.dataset.sel);
