@@ -671,6 +671,7 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <div class="seg segWide" id="spoolSeg" hidden><button data-s="ams">🛰️ Imprimantes</button><button data-s="hist">🕘 Impressions</button><button data-s="stock">🧵 Stock</button></div>
     <div id="secAms"><div class="card" id="bambuCard" hidden></div></div>
     <div id="secHist" hidden>
+      <div class="seg" id="histDev" hidden></div>
       <div class="search" style="max-width:none;margin-bottom:12px"><input id="histSearch" type="search" placeholder="Rechercher : nom, imprimante, matière, emplacement, date, « échouée »…" enterkeyhint="search"></div>
       <div class="card" id="histCard"></div>
     </div>
@@ -2891,16 +2892,23 @@ function taskText(t) {
     ...(t.ams || []).flatMap(m => [m.type, m.letter]),
     dt ? dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleDateString('fr-FR', {day: 'numeric', month: 'long', year: 'numeric', weekday: 'long'}) : ''].join(' '));
 }
+let histDev = 'all';
 function renderHist() {
   const box = $('histCard'), all = hist?.tasks || bambu?.tasks || [];
-  const words = fold($('histSearch').value).split(/\s+/).filter(Boolean);
-  const list = words.length ? all.filter(t => { const x = taskText(t); return words.every(w => x.includes(w)); }) : all;
+  // filtre par imprimante (compte Bambu + celles vues dans l'historique)
+  const devs = [...(bambu?.devices || hist?.devices || [])];
+  for (const t of all) if (t.device && !devs.some(d => d.id === t.device)) devs.push({id: t.device, name: t.deviceName || 'Imprimante'});
+  if (histDev !== 'all' && !devs.some(d => d.id === histDev)) histDev = 'all';
+  $('histDev').hidden = devs.length < 2;
+  $('histDev').innerHTML = `<button data-d="all"${histDev === 'all' ? ' class="on"' : ''}>Toutes</button>` + devs.map(d => `<button data-d="${esc(d.id)}"${histDev === d.id ? ' class="on"' : ''}>${esc(d.name)}</button>`).join('');
+  const words = fold($('histSearch').value).split(/\s+/).filter(Boolean), filtered = words.length || histDev !== 'all';
+  const list = all.filter(t => (histDev === 'all' || t.device === histDev) && (!words.length || (x => words.every(w => x.includes(w)))(taskText(t))));
   const head = `<div class="cardHead"><span class="badgeIcon">🕘</span><h2>Dernières impressions</h2><button class="link" id="hRefresh" style="margin-left:auto" aria-label="Actualiser">↻<span class="hideSm"> Actualiser</span></button></div>`;
   if (!hist && !bambu) { box.innerHTML = head + '<p class="hint" style="margin:0">⏳ Chargement…</p>'; return; }
-  const found = words.length ? `<p class="hint" style="margin:0 0 8px">${list.length.toLocaleString('fr-FR')} impression${list.length > 1 ? 's' : ''} trouvée${list.length > 1 ? 's' : ''} · ${gr(list.reduce((a, t) => a + (taskPart(t) ?? 1) * (t.weight || 0), 0))}</p>` : '';
+  const found = filtered ? `<p class="hint" style="margin:0 0 8px">${list.length.toLocaleString('fr-FR')} impression${list.length > 1 ? 's' : ''} trouvée${list.length > 1 ? 's' : ''} · ${gr(list.reduce((a, t) => a + (taskPart(t) ?? 1) * (t.weight || 0), 0))}</p>` : '';
   box.innerHTML = head + found + (list.length
     ? list.slice(0, histShown).map(taskCard).join('') + (list.length > histShown ? `<button class="btn block" id="hMore" style="margin-top:12px;width:100%">Voir plus (${list.length - histShown} de plus)</button>` : '')
-    : `<div class="empty"><span class="big">🕘</span>${words.length ? 'Aucune impression ne correspond à ta recherche.' : 'Aucune impression enregistrée pour l’instant.'}</div>`)
+    : `<div class="empty"><span class="big">🕘</span>${filtered ? 'Aucune impression ne correspond à ta recherche.' : 'Aucune impression enregistrée pour l’instant.'}</div>`)
     + histSummary(all);
 }
 // Combien d'impressions sont gardées, depuis quand, par imprimante ; et le bouton pour tout récupérer
@@ -2912,6 +2920,7 @@ function histSummary(list) {
     <button class="btn small" id="hFull">↻ Récupérer tout l’historique</button></div>`;
 }
 $('histSearch').addEventListener('input', () => { histShown = 20; renderHist(); });
+$('histDev').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (!b) return; histDev = b.dataset.d; histShown = 20; renderHist(); });
 $('histCard').addEventListener('change', e => {
   const c = e.target.closest('[data-sel]'); if (!c) return;
   c.checked ? selTasks.add(c.dataset.sel) : selTasks.delete(c.dataset.sel);
