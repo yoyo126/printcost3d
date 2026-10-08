@@ -32,6 +32,8 @@ export default async function handler(req, res) {
       const token = await issueSignedToken({pathname, operations: ['get'], validUntil});
       const {presignedUrl} = await presignUrl(token, {operation: 'get', pathname, access: 'private', validUntil});
       res.setHeader('Cache-Control', 'private, no-store');
+      // json=1 : le lien seul (pour l'ouvrir dans Bambu Studio)
+      if (req.query?.json) return res.json({url: presignedUrl});
       res.statusCode = 302; res.setHeader('Location', presignedUrl); res.end();
       return;
     }

@@ -356,6 +356,23 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .rebuy .dotBig{flex:none}
 .rebuy>div:nth-child(2){flex:1}
 .rebuyQty{display:flex;flex-direction:column;align-items:flex-end;text-align:right;font-size:14px;white-space:nowrap}
+.order,.qItem{border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:10px;background:var(--card)}
+.order.late{border-color:var(--neg,#e5484d)}
+.oHead{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.oHead h4{margin:0;font-size:16px}
+.oHead .pill{margin-left:auto}
+.oItem{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px;flex-wrap:wrap}
+.oItem .tImg,.qItem .tImg{width:34px;height:34px;border-radius:9px;object-fit:cover;background:var(--card2);display:grid;place-items:center;font-size:18px;flex:none}
+.qItem .tImg{width:56px;height:56px;border-radius:12px;font-size:24px}
+.oActs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.qItem{display:flex;gap:12px;align-items:flex-start}
+.qItem.run{border-color:var(--brand)}
+.qItem.done{opacity:.6}
+.qMove{display:flex;flex-direction:column;gap:2px}
+.qMove button{border:0;background:var(--card2);border-radius:8px;width:30px;height:26px;color:var(--muted)}
+.ordRow{display:grid;grid-template-columns:1fr 70px 96px 32px;gap:8px;align-items:end;margin-bottom:8px}
+.ordRow label{margin:0}
+@media (max-width:600px){.ordRow{grid-template-columns:1fr 1fr 28px;padding-bottom:8px;border-bottom:1px solid var(--line)}.ordRow>label:first-child{grid-column:1/-1}}
 .histDates{display:flex;gap:8px 10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .histDates select{width:auto;margin:0;flex:0 1 auto}
 @media (max-width:600px){.histDates select{flex:1 1 140px;min-width:0}}
@@ -671,9 +688,20 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
 
   <!-- VENTES -->
   <section id="sales" class="panel">
-    <div class="toolbar"><select id="salesMonth"></select><button class="btn primary" id="newSale">＋ Nouvelle vente</button></div>
-    <div class="kpis" id="salesKpis"></div>
-    <div class="card"><div class="tableWrap"><table id="salesTable"></table></div></div>
+    <div class="seg segWide" id="salesSeg"><button data-s="orders">📋 Commandes</button><button data-s="queue">🖨️ À imprimer</button><button data-s="sales">💸 Ventes</button></div>
+    <div id="secOrders">
+      <div class="toolbar"><select id="ordFilter"><option value="open">En cours</option><option value="sent">Expédiées</option><option value="all">Toutes</option></select><button class="btn primary" id="newOrder">＋ Nouvelle commande</button></div>
+      <div id="orderList"></div>
+    </div>
+    <div id="secQueue" hidden>
+      <div class="toolbar"><span class="hint" id="queueInfo" style="margin:0"></span><button class="btn primary" id="newQueue">＋ Ajouter à imprimer</button></div>
+      <div id="queueList"></div>
+    </div>
+    <div id="secSales" hidden>
+      <div class="toolbar"><select id="salesMonth"></select><button class="btn primary" id="newSale">＋ Nouvelle vente</button></div>
+      <div class="kpis" id="salesKpis"></div>
+      <div class="card"><div class="tableWrap"><table id="salesTable"></table></div></div>
+    </div>
   </section>
 
   <!-- FILAMENTS -->
@@ -878,6 +906,37 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
   <div class="dFoot"><button class="btn danger" type="button" id="delSale">Supprimer</button><span style="flex:1"></span><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Enregistrer</button></div>
 </form></dialog>
 
+<!-- Commande client -->
+<dialog id="dlgOrder"><form method="dialog" id="fOrder">
+  <div class="dHead"><h2 id="orderTitle">Commande</h2><button class="iconBtn" value="cancel" formnovalidate aria-label="Fermer">✕</button></div>
+  <div class="grid2">
+    <label>Client<input name="client" required placeholder="Nom ou pseudo"></label>
+    <label>Contact<input name="contact" placeholder="Téléphone, e-mail, Instagram…"></label>
+    <label>Canal<select name="channelId"></select></label>
+    <label>À livrer pour le<input name="due" type="date"></label>
+  </div>
+  <h3>Articles</h3>
+  <div class="listEdit" id="ordItems"></div>
+  <button class="link" type="button" id="addOrdItem">＋ Ajouter un article</button>
+  <div class="grid2" style="margin-top:10px">
+    <label>Frais d'envoi à ta charge (€)<input name="shipping" type="number" min="0" step="any" value="0" inputmode="decimal"></label>
+    <label>Note<input name="note" placeholder="Couleur, personnalisation, adresse…"></label>
+  </div>
+  <div id="ordPreview" class="notice"></div>
+  <div class="dFoot"><button class="btn danger" type="button" id="delOrder">Supprimer</button><span style="flex:1"></span><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Enregistrer</button></div>
+</form></dialog>
+<!-- Ajout à la file d'attente -->
+<dialog id="dlgQueue"><form method="dialog" id="fQueue">
+  <div class="dHead"><h2>Ajouter à imprimer</h2><button class="iconBtn" value="cancel" formnovalidate aria-label="Fermer">✕</button></div>
+  <div class="grid2">
+    <label class="full">Modèle du catalogue<select name="modelId" required></select></label>
+    <label>Nombre de lancements<input name="runs" type="number" min="1" max="30" step="1" value="1" inputmode="numeric"></label>
+    <label>Imprimante<select name="printer"></select></label>
+  </div>
+  <p class="hint" id="queuePreview"></p>
+  <div class="dFoot"><span style="flex:1"></span><button class="btn" value="cancel" formnovalidate>Annuler</button><button class="btn primary" value="save">Ajouter</button></div>
+</form></dialog>
+
 <div class="dropOverlay" aria-hidden="true"><div>Lâche ton fichier ici<small>3MF ou STL</small></div></div>
 <!-- Connexion au compte en ligne -->
 <div id="gate" class="gate" hidden>
@@ -1050,7 +1109,7 @@ function defaultState() {
       {id:'whatnot', name:'Whatnot', pct:10.9, fixed:0.30},
       {id:'ebay', name:'eBay', pct:0, fixed:0},
     ],
-    spools: [], models: [], prints: [], sales: [],
+    spools: [], models: [], prints: [], sales: [], orders: [], queue: [],
   };
 }
 function load() {
@@ -2171,6 +2230,286 @@ function renderSales() {
 $('salesMonth').onchange = renderSales;
 $('salesTable').addEventListener('click', e => { const tr = e.target.closest('[data-sale]'); if (tr) openSale(state.sales.find(s => s.id === tr.dataset.sale)); });
 
+/* ---------- Commandes clients et file d'attente ---------- */
+let salesSec = (() => { try { return sessionStorage.getItem('pc3d-vsec'); } catch { return null; } })() || 'orders', editingOrder = null, ordDraft = [];
+function renderSalesTab() {
+  $('salesSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.s === salesSec));
+  $('secOrders').hidden = salesSec !== 'orders'; $('secQueue').hidden = salesSec !== 'queue'; $('secSales').hidden = salesSec !== 'sales';
+  if (salesSec === 'orders') renderOrders();
+  else if (salesSec === 'queue') { renderQueue(); if (cloud.logged) { loadBambu().then(renderQueue).catch(() => {}); if (!hist) loadHistory().then(renderQueue).catch(() => {}); } }
+  else renderSales();
+}
+$('salesSeg').addEventListener('click', e => {
+  const b = e.target.closest('[data-s]'); if (!b) return;
+  salesSec = b.dataset.s; try { sessionStorage.setItem('pc3d-vsec', salesSec); } catch {}
+  renderSalesTab();
+});
+const modelById = id => state.models.find(m => m.id === id);
+const orderTotal = o => o.items.reduce((a, it) => a + it.qty * num(it.unitPrice), 0);
+// Pièces du stock réservées aux commandes, de la plus urgente à la moins urgente ; le reste est « à imprimer »
+function orderAlloc() {
+  const pool = new Map(state.models.map(m => [m.id, Math.max(0, m.stock || 0)])), out = new Map();
+  const open = (state.orders || []).filter(o => o.status !== 'sent' && o.status !== 'cancelled')
+    .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || String(a.created).localeCompare(String(b.created)));
+  for (const o of open) out.set(o.id, o.items.map(it => {
+    if (!it.modelId || !modelById(it.modelId)) return {ready: it.qty, need: 0};
+    const take = Math.min(it.qty, pool.get(it.modelId) || 0); pool.set(it.modelId, (pool.get(it.modelId) || 0) - take);
+    return {ready: take, need: it.qty - take};
+  }));
+  return out;
+}
+// Pièces déjà prévues dans la file pour une commande et un modèle
+const queuedFor = (orderId, modelId) => (state.queue || []).filter(q => q.status !== 'done' && q.orderId === orderId && q.modelId === modelId).reduce((a, q) => a + (q.pieces || 1), 0);
+function renderOrders() {
+  const filter = $('ordFilter').value, alloc = orderAlloc(), now = today();
+  const list = (state.orders || []).filter(o => filter === 'all' || (filter === 'sent' ? o.status === 'sent' : o.status !== 'sent' && o.status !== 'cancelled'))
+    .sort((a, b) => filter === 'sent' ? String(b.sentAt || '').localeCompare(String(a.sentAt || '')) : (a.due || '9999').localeCompare(b.due || '9999'));
+  const chName = id => state.channels.find(c => c.id === id)?.name || '';
+  $('orderList').innerHTML = list.map(o => {
+    const al = alloc.get(o.id), need = al ? al.reduce((a, x) => a + x.need, 0) : 0, sent = o.status === 'sent';
+    const late = !sent && o.due && o.due < now, soon = !sent && o.due && !late && (Date.parse(o.due) - Date.parse(now)) / 864e5 <= 2;
+    const st = sent ? ['ok', '✓ Expédiée'] : need ? ['warn', `🖨️ ${need} pièce${need > 1 ? 's' : ''} à imprimer`] : ['ok', '📦 Prête à expédier'];
+    const toQueue = !sent && al ? o.items.reduce((a, it, i) => a + Math.max(0, al[i].need - queuedFor(o.id, it.modelId)), 0) : 0;
+    return `<div class="order${late ? ' late' : ''}" data-order="${esc(o.id)}">
+      <div class="oHead"><h4>${esc(o.client || 'Client')}</h4><span class="muted">${o.due ? `${late ? '<b class="neg">en retard</b> · ' : soon ? '<b>bientôt</b> · ' : ''}pour le ${fmtDate(o.due)}` : 'sans date'}${chName(o.channelId) ? ' · ' + esc(chName(o.channelId)) : ''}</span><span class="pill ${st[0]}">${st[1]}</span></div>
+      ${o.contact || o.note ? `<div class="hint" style="margin:2px 0 4px">${[o.contact, o.note].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
+      ${o.items.map((it, i) => { const m = modelById(it.modelId), a = al?.[i], q = queuedFor(o.id, it.modelId);
+        return `<div class="oItem">${m?.thumb ? `<img class="tImg" src="${esc(m.thumb)}" alt="">` : '<span class="tImg">🧊</span>'}<b>${it.qty} ×</b> ${esc(m?.name || it.name || 'Article')} <span class="muted">${eur(it.unitPrice)}</span>
+          ${!sent && a && m ? `<span class="muted" style="margin-left:auto">${a.ready}/${it.qty} prête${a.ready > 1 ? 's' : ''}${a.need ? ` · ${a.need} à imprimer${q ? ` (${Math.min(q, a.need)} en file)` : ''}` : ''}</span>` : ''}</div>`; }).join('')}
+      <div class="meta">Total <b>${eur(orderTotal(o))}</b>${o.shipping ? ` · envoi ${eur(o.shipping)}` : ''}</div>
+      <div class="oActs">
+        ${toQueue ? `<button class="btn small primary" data-oact="queue">🖨️ Mettre en file (${toQueue} pièce${toQueue > 1 ? 's' : ''})</button>` : ''}
+        ${!sent ? `<button class="btn small${need ? '' : ' primary'}" data-oact="send">📦 Expédiée</button>` : `<button class="btn small" data-oact="unsend">Annuler l’expédition</button>`}
+        <button class="btn small" data-oact="edit">Modifier</button>
+      </div></div>`;
+  }).join('') || emptyState('📋', filter === 'sent' ? 'Aucune commande expédiée' : 'Aucune commande en cours', 'Note ici les commandes de tes clients : l’app réserve les pièces du stock, te dit ce qu’il reste à imprimer et enregistre la vente à l’expédition.');
+}
+$('ordFilter').onchange = renderOrders;
+$('newOrder').onclick = () => openOrder(null);
+function openOrder(o) {
+  editingOrder = o; const f = $('fOrder');
+  $('orderTitle').textContent = o ? 'Modifier la commande' : 'Nouvelle commande 📋'; $('delOrder').hidden = !o;
+  f.channelId.innerHTML = state.channels.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+  f.client.value = o?.client || ''; f.contact.value = o?.contact || ''; f.due.value = o?.due || ''; f.shipping.value = o?.shipping ?? 0; f.note.value = o?.note || '';
+  f.channelId.value = o?.channelId || (state.lastChannel && state.channels.some(c => c.id === state.lastChannel) ? state.lastChannel : state.channels[0]?.id || '');
+  ordDraft = o ? JSON.parse(JSON.stringify(o.items)) : [];
+  if (!ordDraft.length) ordDraft.push(newOrdItem());
+  renderOrdItems(); $('dlgOrder').showModal();
+}
+// Prix d'un article : prix de vente du catalogue, ajusté au canal (commission)
+function ordItemPrice(modelId) {
+  const m = modelById(modelId), ch = state.channels.find(c => c.id === $('fOrder').channelId.value);
+  if (!m) return 0; const base = modelPrice(m); return Math.round((ch ? channelPrice(ch, base) : base) * 100) / 100;
+}
+const newOrdItem = (modelId = state.models[0]?.id || '') => ({id: uid(), modelId, name: '', qty: 1, unitPrice: modelId ? ordItemPrice(modelId) : 0});
+function renderOrdItems() {
+  const opts = sel => state.models.map(m => `<option value="${esc(m.id)}"${m.id === sel ? ' selected' : ''}>${esc(m.name)} (${m.stock || 0} en stock)</option>`).join('') + `<option value=""${!sel ? ' selected' : ''}>Autre article…</option>`;
+  $('ordItems').innerHTML = ordDraft.map((it, i) => `<div class="ordRow" data-i="${i}">
+    <label>Article<select data-k="modelId">${opts(it.modelId)}</select>${it.modelId ? '' : `<input data-k="name" value="${esc(it.name)}" placeholder="Désignation">`}</label>
+    <label>Qté<input data-k="qty" type="number" min="1" step="1" value="${it.qty}" inputmode="numeric"></label>
+    <label>Prix (€)<input data-k="unitPrice" type="number" min="0" step="any" value="${it.unitPrice}" inputmode="decimal"></label>
+    <button type="button" class="iconBtn" data-del="${i}" aria-label="Retirer"${ordDraft.length < 2 ? ' disabled' : ''}>✕</button></div>`).join('');
+  updateOrdPreview();
+}
+function updateOrdPreview() {
+  const f = $('fOrder'), ch = state.channels.find(c => c.id === f.channelId.value), rev = ordDraft.reduce((a, it) => a + it.qty * num(it.unitPrice), 0);
+  const cost = ordDraft.reduce((a, it) => { const m = modelById(it.modelId); return a + (m ? computeCost(m).unit * it.qty : 0); }, 0);
+  const fees = channelFees(ch, rev), profit = rev - fees - num(f.shipping.value) - cost;
+  $('ordPreview').innerHTML = `Total <b>${eur(rev)}</b>${fees ? ` − ${eur(fees)} de frais` : ''}${num(f.shipping.value) ? ` − ${eur(num(f.shipping.value))} d’envoi` : ''} · bénéfice prévu <b class="${profit >= 0 ? 'pos' : 'neg'}">${eur(profit)}</b> <span class="muted">(coût ${eur(cost)})</span>`;
+}
+$('ordItems').addEventListener('input', e => {
+  const r = e.target.closest('.ordRow'), k = e.target.dataset.k; if (!r || !k) return;
+  const it = ordDraft[+r.dataset.i];
+  if (k === 'modelId') { it.modelId = e.target.value; it.unitPrice = ordItemPrice(it.modelId); renderOrdItems(); return; }
+  it[k] = k === 'name' ? e.target.value : k === 'qty' ? Math.max(1, parseInt(e.target.value) || 1) : num(e.target.value);
+  updateOrdPreview();
+});
+$('ordItems').addEventListener('click', e => { const d = e.target.closest('[data-del]'); if (!d || ordDraft.length < 2) return; ordDraft.splice(+d.dataset.del, 1); renderOrdItems(); });
+$('addOrdItem').onclick = () => { ordDraft.push(newOrdItem()); renderOrdItems(); };
+$('fOrder').addEventListener('input', e => {
+  if (e.target.name === 'channelId') { ordDraft.forEach(it => { if (it.modelId) it.unitPrice = ordItemPrice(it.modelId); }); renderOrdItems(); return; }
+  if (e.target.name === 'shipping') updateOrdPreview();
+});
+$('fOrder').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'save') return;
+  const f = $('fOrder');
+  const data = {client: f.client.value.trim(), contact: f.contact.value.trim(), channelId: f.channelId.value, due: f.due.value, shipping: num(f.shipping.value), note: f.note.value.trim(),
+    items: ordDraft.filter(it => it.modelId || it.name.trim()).map(it => ({...it, name: modelById(it.modelId)?.name || it.name.trim()}))};
+  if (!data.items.length) { e.preventDefault(); toast('Ajoute au moins un article'); return; }
+  if (editingOrder) Object.assign(editingOrder, data);
+  else (state.orders ||= []).push({id: uid(), created: new Date().toISOString(), status: 'open', ...data});
+  state.lastChannel = data.channelId;
+  save(); renderAll(); toast(editingOrder ? 'Commande modifiée' : '📋 Commande ajoutée');
+});
+$('delOrder').onclick = () => {
+  const o = editingOrder; if (!o || !confirm(`Supprimer la commande de ${o.client} ?${o.status === 'sent' ? ' Les ventes déjà enregistrées sont gardées.' : ''}`)) return;
+  state.queue = (state.queue || []).filter(q => q.orderId !== o.id || q.status === 'done');
+  trash(o.id); state.orders = state.orders.filter(x => x !== o); save(); $('dlgOrder').close(); renderAll();
+};
+$('orderList').addEventListener('click', e => {
+  const b = e.target.closest('[data-oact]'); if (!b) return;
+  const o = state.orders.find(x => x.id === b.closest('[data-order]').dataset.order); if (!o) return;
+  const act = b.dataset.oact;
+  if (act === 'edit') { openOrder(o); return; }
+  if (act === 'queue') {
+    const al = orderAlloc().get(o.id); let n = 0;
+    o.items.forEach((it, i) => { const m = modelById(it.modelId); if (!m) return; n += addToQueue(m, Math.max(0, al[i].need - queuedFor(o.id, m.id)), o); });
+    save(); renderOrders(); toast(`🖨️ ${n} lancement${n > 1 ? 's' : ''} ajouté${n > 1 ? 's' : ''} à la file d’attente`); return;
+  }
+  if (act === 'send') {
+    const al = orderAlloc().get(o.id), need = al.reduce((a, x) => a + x.need, 0);
+    if (need && !confirm(`Il manque encore ${need} pièce${need > 1 ? 's' : ''} en stock pour cette commande. La marquer expédiée quand même ?`)) return;
+    const ch = state.channels.find(c => c.id === o.channelId);
+    // une vente par article ; frais fixes du canal et envoi comptés une seule fois (sur le premier article)
+    o.saleIds = o.items.map((it, i) => {
+      const m = modelById(it.modelId), rev = it.qty * num(it.unitPrice);
+      const sale = {id: uid(), date: today(), modelId: m?.id || '', name: m?.name || it.name || 'Article', channelId: o.channelId, qty: it.qty, unitPrice: num(it.unitPrice),
+        fees: ch ? rev * ch.pct / 100 + (i === 0 ? num(ch.fixed) : 0) : 0, shipping: i === 0 ? num(o.shipping) : 0,
+        unitCost: m ? Math.round(computeCost(m).unit * 100) / 100 : 0, note: `Commande ${o.client}`, orderId: o.id};
+      if (m) m.stock = (m.stock || 0) - it.qty;
+      state.sales.push(sale); return sale.id;
+    });
+    o.status = 'sent'; o.sentAt = new Date().toISOString();
+    state.queue = (state.queue || []).filter(q => q.orderId !== o.id || q.status === 'done');
+    save(); renderAll();
+    const profit = state.sales.filter(s => o.saleIds.includes(s.id)).reduce((a, s) => a + saleProfit(s), 0);
+    toast(`📦 Expédiée · vente enregistrée : ${profit >= 0 ? '+' : ''}${eur(profit)} de bénéfice`); if (profit > 0) confetti();
+    return;
+  }
+  if (act === 'unsend' && confirm('Remettre cette commande en cours ? Les ventes enregistrées à l’expédition sont retirées et les pièces reviennent en stock.')) {
+    for (const id of o.saleIds || []) { const s = state.sales.find(x => x.id === id); if (!s) continue; const m = modelById(s.modelId); if (m) m.stock += s.qty; trash(s.id); }
+    state.sales = state.sales.filter(s => !(o.saleIds || []).includes(s.id));
+    o.status = 'open'; o.saleIds = []; delete o.sentAt; save(); renderAll();
+  }
+});
+
+// File d'attente : un élément = un lancement d'impression (plateau) d'un modèle du catalogue
+function addToQueue(m, pieces, order = null, printer = '') {
+  const per = Math.max(1, computeCost(m).pcs), runs = Math.min(30, Math.ceil(pieces / per));
+  for (let i = 0; i < runs; i++) (state.queue ||= []).push({id: uid(), modelId: m.id, pieces: per, orderId: order?.id || '', printer, status: 'wait', added: new Date().toISOString()});
+  return runs;
+}
+const queueMinutes = m => { const c = computeCost(m); return Math.round(c.h * 60) || 60; };
+// Imprimantes connues (compte Bambu) avec leur état en direct
+const queueDevices = () => (bambu?.devices || hist?.devices || []).map(d => ({id: d.id, name: d.name, online: d.online !== false, a: d.ams}));
+// Une impression Bambu terminée de ce modèle, après l'ajout à la file, pas encore attribuée : l'élément est fait
+function queueAutoDone() {
+  let changed = false;
+  const used = new Set((state.queue || []).map(q => q.taskId).filter(Boolean));
+  for (const q of (state.queue || []).filter(x => x.status !== 'done')) {
+    const t = allTasks().filter(t => t.status !== 1 && taskOk(t) && !used.has(t.id) && Date.parse(t.end || t.start || 0) > Date.parse(q.added) && suggestModel(t)?.id === q.modelId)
+      .sort((a, b) => String(a.end).localeCompare(String(b.end)))[0];
+    if (!t) continue;
+    Object.assign(q, {status: 'done', taskId: t.id, doneAt: t.end, printer: t.device}); used.add(t.id); changed = true;
+  }
+  if (changed) save();
+  return changed;
+}
+// Planning : chaque imprimante enchaîne ses éléments ; « auto » = la première libre. Impression en cours = élément démarré.
+function queuePlan() {
+  const devs = queueDevices(), free = new Map(), running = new Map(), plan = new Map(), now = Date.now();
+  for (const d of devs) {
+    const a = d.a, busy = a && ['RUNNING', 'PAUSE', 'PREPARE'].includes(a.state);
+    free.set(d.id, now + (busy ? (a.remaining || 0) * 60000 : 0));
+    if (busy && a.job) { const sg = suggestModel({title: a.job}); if (sg) running.set(d.id, {modelId: sg.id, progress: a.progress, end: now + (a.remaining || 0) * 60000}); }
+  }
+  for (const q of (state.queue || []).filter(x => x.status !== 'done')) {
+    const m = modelById(q.modelId); if (!m) continue;
+    // déjà en train de s'imprimer : la première de ce modèle sur une imprimante qui l'imprime
+    const runDev = [...running].find(([id, r]) => r.modelId === q.modelId && (!q.printer || q.printer === id));
+    if (runDev) { plan.set(q.id, {dev: runDev[0], running: true, progress: runDev[1].progress, end: runDev[1].end}); running.delete(runDev[0]); continue; }
+    const dev = q.printer && free.has(q.printer) ? q.printer : [...free].sort((a, b) => a[1] - b[1])[0]?.[0];
+    if (!dev) { plan.set(q.id, {}); continue; }
+    const start = free.get(dev), end = start + queueMinutes(m) * 60000; free.set(dev, end);
+    plan.set(q.id, {dev, start, end});
+  }
+  return plan;
+}
+const whenTxt = ms => { const d = new Date(ms), n = new Date(); const day = d.toDateString() === n.toDateString() ? '' : d.toDateString() === new Date(+n + 864e5).toDateString() ? 'demain ' : d.toLocaleDateString('fr-FR', {weekday: 'short', day: 'numeric'}) + ' '; return day + d.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}); };
+function renderQueue() {
+  if (queueAutoDone()) toast('✓ File d’attente mise à jour avec les impressions terminées');
+  const plan = queuePlan(), devs = queueDevices(), devName = id => devs.find(d => d.id === id)?.name || devNameOf(id) || '';
+  const wait = (state.queue || []).filter(q => q.status !== 'done' && modelById(q.modelId)), done = (state.queue || []).filter(q => q.status === 'done').slice(-5).reverse();
+  const totalMin = wait.reduce((a, q) => a + queueMinutes(modelById(q.modelId)), 0);
+  const lastEnd = Math.max(0, ...[...plan.values()].map(p => p.end || 0));
+  $('queueInfo').innerHTML = wait.length ? `${wait.length} lancement${wait.length > 1 ? 's' : ''} · ${dur(totalMin / 60)} de machine${lastEnd ? ` · tout fini vers <b>${whenTxt(lastEnd)}</b>` : ''}` : '';
+  const item = (q, i) => {
+    const m = modelById(q.modelId), p = plan.get(q.id) || {}, o = q.orderId && state.orders?.find(x => x.id === q.orderId), isDone = q.status === 'done';
+    const where = isDone ? `✓ imprimée${q.doneAt ? ' le ' + fmtDate(new Date(q.doneAt).toLocaleDateString('sv')) : ''}${q.printer ? ' sur ' + esc(devName(q.printer)) : ''}`
+      : p.running ? `<b>🖨️ en cours sur ${esc(devName(p.dev))}</b>${p.progress != null ? ` · ${p.progress} %` : ''} · fin vers ${whenTxt(p.end)}`
+      : p.dev ? `${q.printer ? '' : 'auto → '}<b>${esc(devName(p.dev))}</b> · ${p.start - Date.now() < 60000 ? 'peut démarrer maintenant' : 'démarre vers ' + whenTxt(p.start)} · fin vers ${whenTxt(p.end)}` : '';
+    const open = m.file ? `<button class="btn small" data-qact="studio">🖥️ Ouvrir dans Bambu Studio</button>` : '';
+    const handy = IS_PHONE && handyFromLink(m.link) ? `<a class="btn small" href="${esc(handyFromLink(m.link))}">📱 Imprimer avec Bambu Handy</a>` : '';
+    const dl = IS_PHONE && m.file && !handy ? `<a class="btn small" href="${fileHref(m.file)}">📄 Fichier</a>` : '';
+    return `<div class="qItem${p.running ? ' run' : ''}${isDone ? ' done' : ''}" data-q="${esc(q.id)}">
+      ${isDone ? '' : `<div class="qMove"><button type="button" data-qact="up" aria-label="Monter"${i === 0 ? ' disabled' : ''}>▲</button><button type="button" data-qact="down" aria-label="Descendre"${i === wait.length - 1 ? ' disabled' : ''}>▼</button></div>`}
+      ${m.thumb ? `<img class="tImg" src="${esc(m.thumb)}" alt="">` : '<span class="tImg">🧊</span>'}
+      <div style="min-width:0;flex:1"><div class="tTitle">${esc(m.name)} <span class="muted">· ${q.pieces} pièce${q.pieces > 1 ? 's' : ''} · ${dur(queueMinutes(m) / 60)}</span></div>
+        ${o ? `<div class="hint" style="margin:1px 0 0">📋 Commande ${esc(o.client)}${o.due ? ' · pour le ' + fmtDate(o.due) : ''}</div>` : ''}
+        <div class="hint" style="margin:2px 0 0">${where}</div>
+        ${isDone ? '' : `<div class="oActs">${devs.length > 1 ? `<select data-qact="printer" style="width:auto;margin:0;padding:6px 10px;font-size:14px"><option value="">Imprimante : auto</option>${devs.map(d => `<option value="${esc(d.id)}"${q.printer === d.id ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select>` : ''}
+          ${handy}${open}${dl}<button class="btn small" data-qact="done">✓ Imprimée</button><button class="btn small" data-qact="del" aria-label="Retirer">✕</button></div>`}
+      </div></div>`;
+  };
+  $('queueList').innerHTML = (wait.map(item).join('') || emptyState('🖨️', 'Rien à imprimer', 'Ajoute un modèle du catalogue, ou « Mettre en file » depuis une commande : l’app planifie sur tes imprimantes et coche tout seul ce qui est imprimé.'))
+    + (done.length ? `<h3>Dernières imprimées</h3>${done.map(item).join('')}` : '');
+}
+$('queueList').addEventListener('change', e => {
+  const s = e.target.closest('[data-qact="printer"]'); if (!s) return;
+  const q = state.queue.find(x => x.id === s.closest('[data-q]').dataset.q); if (!q) return;
+  q.printer = s.value; save(); renderQueue();
+});
+$('queueList').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-qact]'); if (!b) return;
+  const q = state.queue.find(x => x.id === b.closest('[data-q]').dataset.q); if (!q) return;
+  const act = b.dataset.qact, m = modelById(q.modelId);
+  if (act === 'up' || act === 'down') {
+    const wait = state.queue.filter(x => x.status !== 'done'), i = wait.indexOf(q), j = act === 'up' ? i - 1 : i + 1; if (j < 0 || j >= wait.length) return;
+    const a = state.queue.indexOf(q), c = state.queue.indexOf(wait[j]); [state.queue[a], state.queue[c]] = [state.queue[c], state.queue[a]];
+    save(); renderQueue(); return;
+  }
+  if (act === 'del') { state.queue = state.queue.filter(x => x !== q); save(); renderQueue(); return; }
+  if (act === 'studio') {
+    // Bambu Studio ouvre le fichier (lien signé valable 10 min) : choisir l'imprimante et lancer depuis Studio
+    const r = await api(`/api/files?url=${encodeURIComponent(m.file.url)}&name=${encodeURIComponent(m.file.name)}&json=1`);
+    if (!r.ok || !r.data?.url) { toast('⚠️ Fichier introuvable'); return; }
+    location.href = `bambustudio://open?file=${encodeURIComponent(r.data.url)}`;
+    toast('🖥️ Ouverture dans Bambu Studio…'); return;
+  }
+  if (act === 'done') {
+    // impression Bambu correspondante déjà terminée : on la relie (stock ajouté une seule fois) ; sinon impression notée à la main
+    const used = new Set(state.queue.map(x => x.taskId).filter(Boolean));
+    const t = allTasks().find(t => t.status !== 1 && taskOk(t) && !used.has(t.id) && Date.parse(t.end || 0) > Date.parse(q.added) && suggestModel(t)?.id === q.modelId);
+    if (t) { if (!state.taskDone?.[t.id]) addTaskToStock(t, m.id, q.pieces); Object.assign(q, {status: 'done', taskId: t.id, doneAt: t.end, printer: t.device}); }
+    else {
+      m.stock = (m.stock || 0) + q.pieces;
+      state.prints.unshift({id: uid(), date: today(), modelId: m.id, name: m.name, plates: 1, pieces: q.pieces, failed: false, grams: computeCost(m).grams / Math.max(1, computeCost(m).pcs) * q.pieces, cost: computeCost(m).total, usage: [], source: 'queue'});
+      Object.assign(q, {status: 'done', doneAt: new Date().toISOString()});
+    }
+    save(); renderQueue(); toast(`✓ +${q.pieces} « ${m.name} » en stock`); return;
+  }
+});
+$('newQueue').onclick = () => {
+  if (!state.models.length) { toast('Ajoute d’abord un modèle au catalogue'); return; }
+  const f = $('fQueue'), devs = queueDevices();
+  f.modelId.innerHTML = state.models.map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+  f.printer.innerHTML = '<option value="">Auto (la première libre)</option>' + devs.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+  f.runs.value = 1; updateQueuePreview(); $('dlgQueue').showModal();
+};
+function updateQueuePreview() {
+  const f = $('fQueue'), m = modelById(f.modelId.value); if (!m) return;
+  const n = Math.max(1, parseInt(f.runs.value) || 1), c = computeCost(m);
+  $('queuePreview').textContent = `${n * c.pcs} pièce${n * c.pcs > 1 ? 's' : ''} · ${dur(queueMinutes(m) * n / 60)} de machine${m.file ? '' : ' · pas de fichier joint (à ouvrir depuis MakerWorld ou ton ordinateur)'}`;
+}
+$('fQueue').addEventListener('input', updateQueuePreview);
+$('fQueue').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'save') return;
+  const f = $('fQueue'), m = modelById(f.modelId.value); if (!m) return;
+  const n = Math.max(1, Math.min(30, parseInt(f.runs.value) || 1));
+  addToQueue(m, n * Math.max(1, computeCost(m).pcs), null, f.printer.value);
+  save(); renderQueue(); toast(`🖨️ ${n} lancement${n > 1 ? 's' : ''} ajouté${n > 1 ? 's' : ''}`);
+});
+
 /* ---------- Filaments ---------- */
 let editingSpool = null;
 // Stock regroupé par référence (marque + référence, sinon marque + matière + couleur) : total en kg, bobines en machine / en réserve
@@ -2823,7 +3162,7 @@ function mergeStates(server, local) {
   for (const k in trash) if (trash[k] < limit) delete trash[k];
   const out = {...normalizeState(server), ...local, trash};
   for (const k of ['taskDone', 'taskLinks', 'taskSold', 'taskFix']) out[k] = {...(server[k] || {}), ...(local[k] || {})};
-  for (const k of ['spools', 'models', 'prints', 'sales']) {
+  for (const k of ['spools', 'models', 'prints', 'sales', 'orders', 'queue']) {
     const localIds = new Set((local[k] || []).map(x => x.id));
     out[k] = [...(server[k] || []).filter(x => !localIds.has(x.id)), ...(local[k] || [])].filter(x => !trash[x.id]);
   }
@@ -3845,7 +4184,7 @@ function showTab(name) {
   renderTab(name); updateSumBar(); updateSelBar();
   try { sessionStorage.setItem('pc3d-tab', name); } catch {}
 }
-function renderTab(name) { ({calc: () => { renderFils(); updateResult(); }, catalog: renderCatalog, shop: openShop, sales: renderSales, spools: renderSpoolsTab, report: () => { renderReport(); loadHistory(); }})[name]?.(); }
+function renderTab(name) { ({calc: () => { renderFils(); updateResult(); }, catalog: renderCatalog, shop: openShop, sales: renderSalesTab, spools: renderSpoolsTab, report: () => { renderReport(); loadHistory(); }})[name]?.(); }
 function renderAll() { renderTab(document.querySelector('.panel.active').id); }
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => { showTab(b.dataset.tab); window.scrollTo({top: 0}); });
 
