@@ -354,6 +354,7 @@ tbody tr[data-sale]:hover{background:var(--card2)}
 .toolbar select,.toolbar input{width:auto;margin:0}
 .histDates{display:flex;gap:8px 10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .histDates select{width:auto;margin:0;flex:0 1 auto}
+@media (max-width:600px){.histDates select{flex:1 1 140px;min-width:0}}
 .hdRange{display:flex;gap:10px;flex:1 1 300px;max-width:460px;min-width:0}
 .histDates label{display:flex;align-items:center;gap:6px;margin:0;font-size:14px;color:var(--muted);font-weight:600;flex:1;min-width:0}
 .histDates input{width:auto;flex:1;min-width:0;margin:0;padding:8px 8px}
@@ -678,7 +679,8 @@ dialog form{padding:20px;max-height:88vh;overflow:auto}
     <div id="secHist" hidden>
       <div class="seg" id="histDev" hidden></div>
       <div class="histDates" id="histDates">
-        <select id="histMat" aria-label="Matière"><option value="">Toutes les matières</option></select>
+        <select id="histMat" aria-label="Matière"><option value="">Toute matière</option></select>
+        <select id="histState" aria-label="État"></select>
         <select id="histPer" aria-label="Période"><option value="">Toutes les dates</option><option value="today">Aujourd’hui</option><option value="yday">Hier</option><option value="7">7 derniers jours</option><option value="30">30 derniers jours</option><option value="month">Ce mois-ci</option><option value="lmonth">Le mois dernier</option><option value="year">Cette année</option><option value="custom">Dates précises…</option></select>
         <div class="hdRange" id="histRange"><label>Du<input id="histFrom" type="date"></label><label>au<input id="histTo" type="date"></label></div>
       </div>
@@ -2915,11 +2917,17 @@ function renderHist() {
   // matières vues dans l'historique (les plus utilisées d'abord) ; une impression multi-matières apparaît dans chacune
   const matN = new Map(); for (const t of all) for (const ty of new Set((t.ams || []).map(m => m.type).filter(Boolean))) matN.set(ty, (matN.get(ty) || 0) + 1);
   const mat = matN.has($('histMat').value) ? $('histMat').value : '';
-  $('histMat').innerHTML = `<option value="">Toutes les matières</option>` + [...matN].sort((a, b) => b[1] - a[1]).map(([ty, n]) => `<option value="${esc(ty)}"${ty === mat ? ' selected' : ''}>${esc(ty)} (${n.toLocaleString('fr-FR')})</option>`).join('');
+  $('histMat').innerHTML = `<option value="">Toute matière</option>` + [...matN].sort((a, b) => b[1] - a[1]).map(([ty, n]) => `<option value="${esc(ty)}"${ty === mat ? ' selected' : ''}>${esc(ty)} (${n.toLocaleString('fr-FR')})</option>`).join('');
   $('histMat').hidden = !matN.size;
-  const words = fold($('histSearch').value).split(/\s+/).filter(Boolean), filtered = words.length || histDev !== 'all' || from || to || mat;
+  // état : terminée (y compris arrêtée tout à la fin ou corrigée en « imprimée »), arrêtée / échouée, en cours
+  const stateOf = t => t.status === 1 ? 'run' : taskOk(t) ? 'ok' : 'stop';
+  const stN = {ok: 0, stop: 0, run: 0}; for (const t of all) stN[stateOf(t)]++;
+  const stv = $('histState').value || '';
+  $('histState').innerHTML = [['', 'Tout état'], ['ok', 'Terminées'], ['stop', 'Arrêtées / échouées'], ['run', 'En cours']]
+    .map(([v, l]) => `<option value="${v}"${v === stv ? ' selected' : ''}>${l}${v ? ` (${stN[v].toLocaleString('fr-FR')})` : ''}</option>`).join('');
+  const words = fold($('histSearch').value).split(/\s+/).filter(Boolean), filtered = words.length || histDev !== 'all' || from || to || mat || stv;
   const dayOf = t => { const d = t.end || t.start; return d ? new Date(d).toLocaleDateString('sv') : ''; };
-  const list = all.filter(t => (histDev === 'all' || t.device === histDev) && (!mat || (t.ams || []).some(m => m.type === mat)) && (!from || dayOf(t) >= from) && (!to || (dayOf(t) && dayOf(t) <= to)) && (!words.length || (x => words.every(w => x.includes(w)))(taskText(t))));
+  const list = all.filter(t => (histDev === 'all' || t.device === histDev) && (!mat || (t.ams || []).some(m => m.type === mat)) && (!stv || stateOf(t) === stv) && (!from || dayOf(t) >= from) && (!to || (dayOf(t) && dayOf(t) <= to)) && (!words.length || (x => words.every(w => x.includes(w)))(taskText(t))));
   const head = `<div class="cardHead"><span class="badgeIcon">🕘</span><h2>Dernières impressions</h2><button class="link" id="hRefresh" style="margin-left:auto" aria-label="Actualiser">↻<span class="hideSm"> Actualiser</span></button></div>`;
   if (!hist && !bambu) { box.innerHTML = head + '<p class="hint" style="margin:0">⏳ Chargement…</p>'; return; }
   const found = filtered ? `<p class="hint" style="margin:0 0 8px">${list.length.toLocaleString('fr-FR')} impression${list.length > 1 ? 's' : ''} trouvée${list.length > 1 ? 's' : ''} · ${gr(list.reduce((a, t) => a + (taskPart(t) ?? 1) * (mat ? (t.ams || []).filter(m => m.type === mat).reduce((g, m) => g + num(m.weight), 0) : t.weight || 0), 0))}${mat ? ` de ${esc(mat)}` : ''}</p>` : '';
@@ -2948,7 +2956,7 @@ $('histPer').addEventListener('change', e => {
 const histDatesUi = () => { $('histRange').hidden = $('histPer').value === ''; };
 ['histFrom', 'histTo'].forEach(id => $(id).addEventListener('change', () => { $('histPer').value = $('histFrom').value || $('histTo').value ? 'custom' : ''; histDatesUi(); histShown = 20; renderHist(); }));
 histDatesUi();
-$('histMat').addEventListener('change', () => { histShown = 20; renderHist(); });
+['histMat', 'histState'].forEach(id => $(id).addEventListener('change', () => { histShown = 20; renderHist(); }));
 $('histDev').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (!b) return; histDev = b.dataset.d; histShown = 20; renderHist(); });
 $('histCard').addEventListener('change', e => {
   const c = e.target.closest('[data-sel]'); if (!c) return;
