@@ -2768,8 +2768,8 @@ async function loadBambu(force = false) {
   bambuLoading = false; bambuAt = Date.now();
   await catLoad('Bambu Lab').catch(() => {});
   if (!hist && bambu?.connected) await loadHistory().catch(() => {});
-  // une fois : relire tout l'historique pour corriger les emplacements AMS déjà enregistrés (nouveau format Bambu)
-  if (bambu?.connected && !lsGet('pc3d-hist-slots2')) { lsSet('pc3d-hist-slots2', '1'); loadHistory(true).then(() => { syncAmsToSpools(); trackChipless(); renderAll(); }).catch(() => {}); }
+  // une fois : relire tout l'historique pour corriger les emplacements AMS déjà enregistrés
+  if (bambu?.connected && !lsGet('pc3d-hist-slots3')) { lsSet('pc3d-hist-slots3', '1'); loadHistory(true).then(() => { syncAmsToSpools(); trackChipless(); renderAll(); }).catch(() => {}); }
   syncAmsToSpools(); if (trackChipless() && !$('secStock').hidden) renderSpools();
   autoStockFromTasks(); renderBambu(); renderAlert();
 }

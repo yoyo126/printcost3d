@@ -127,7 +127,8 @@ const ZERO = /^0+$/;
 function tray(t, amsId, nozzle) {
   const uuid = t.tray_uuid && !ZERO.test(t.tray_uuid) ? t.tray_uuid : '';
   const weight = Number(t.tray_weight) || 0, remain = t.remain == null ? -1 : Number(t.remain);
-  const grams = Number(t.remain_g) >= 0 && t.remain_g != null ? Number(t.remain_g) : (remain >= 0 && weight ? Math.round(remain * weight / 100) : null);
+  // bobine sans puce : l'AMS ne connaît pas le restant (il renvoie 0) → calculé avec l'historique
+  const grams = !uuid ? null : Number(t.remain_g) >= 0 && t.remain_g != null ? Number(t.remain_g) : (remain >= 0 && weight ? Math.round(remain * weight / 100) : null);
   return {ams: amsId, slot: Number(t.id) + 1, index: amsId == null ? null : amsId * 4 + Number(t.id), nozzle,
     type: t.tray_type || '', brand: t.tray_sub_brands || '', color: hex(t.tray_color), remain, grams, weight,
     rfid: !!uuid, uuid, empty: !t.tray_type, filaId: t.tray_info_idx || '', code: t.tray_id_name || ''};
@@ -154,15 +155,14 @@ export function normPrinter(p = {}) {
 }
 
 // Impression de l'historique Bambu, en version courte
-// Emplacement utilisé : les firmwares récents donnent amsId + slotId (le champ « ams » n'est plus AMS × 4 + emplacement).
-// 254/255 = bobine externe. Même numérotation que les emplacements lus sur l'imprimante (AMS × 4 + emplacement).
+// Emplacement utilisé : le champ « ams » = numéro global (AMS × 4 + emplacement), même numérotation que les emplacements lus sur l'imprimante.
+// amsId / slotId ne sont pas fiables (souvent 0 / 0 quel que soit l'emplacement) : seulement en secours si « ams » manque.
+// 254/255 = bobine externe.
 function slotOf(m) {
-  const a = Number(m.amsId), s = Number(m.slotId);
-  if (m.amsId != null && m.slotId != null && Number.isFinite(a) && Number.isFinite(s)) {
-    if (a >= 254) return {index: 'ext', letter: 'Ext'};
-    return {index: a * 4 + s, letter: (a < 26 ? String.fromCharCode(65 + a) : 'HT' + (a - 127)) + (s + 1)};
-  }
-  const g = m.ams; if (g == null) return {index: null, letter: ''};
+  let g = m.ams != null && Number.isFinite(Number(m.ams)) ? Number(m.ams) : null;
+  if (g == null && m.amsId != null && m.slotId != null && Number.isFinite(Number(m.amsId)) && Number.isFinite(Number(m.slotId))) g = Number(m.amsId) >= 254 ? 254 : Number(m.amsId) * 4 + Number(m.slotId);
+  if (g == null) return {index: null, letter: ''};
+  if (g >= 254) return {index: 'ext', letter: 'Ext'};
   return {index: g, letter: g < 64 ? String.fromCharCode(65 + Math.floor(g / 4)) + (g % 4 + 1) : ''};
 }
 function normTask(t) {
